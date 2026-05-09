@@ -42,51 +42,76 @@ app = FastAPI()
 
 class ConnectionManager:
     def __init__(self):
-        # 接続中のブラウザを保持するリスト
         self.active_connections: list[WebSocket] = []
+        # サーバー側で数値を管理（初期値）
+        self.total = 0
+        self.undone = 0
 
     async def connect(self, websocket: WebSocket):
-        """Reactクライアントの接続を受け入れ、リストに追加する"""
         await websocket.accept()
         self.active_connections.append(websocket)
 
+        # 接続した瞬間に、現在の最新状態をそのクライアントだけに送る
+        await websocket.send_json({
+            "type": "SYNC_STATE",
+            "total": self.total,
+            "undone": self.undone,
+        })
+
     def disconnect(self, websocket: WebSocket):
-        """リストから特定の接続を削除する。存在しない場合のエラーも考慮"""
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
 
     async def broadcast(self, message: dict):
-        """
-        接続されているすべてのクライアントへメッセージを送信する。
-        送信に失敗した（ブラウザを閉じた等）クライアントは自動で除外する。
-        """
-        # [:] を使うことで、送信中にリストが変更されてもループが壊れないようにします
+        # ブロードキャストされる内容に基づいて、サーバー側の数値も更新しておく
+        if message["type"] == "ADD_UNDONE":
+            self.undone += message["value"]
+        elif message["type"] == "UPDATE_TOTAL":
+            self.total = message["value"]
+        elif message["type"] == "UPDATE_UNDONE":
+            self.undone = message["value"]
+
         for connection in self.active_connections[:]:
             try:
                 await connection.send_json(message)
             except Exception:
-                # 送信に失敗したクライアントは、すでに切断されていると判断して掃除します
                 self.disconnect(connection)
 
 manager = ConnectionManager()
 
 @app.websocket("/workout")
 async def websocket_endpoint(websocket: WebSocket):
-    # クライアントの接続開始
     await manager.connect(websocket)
     try:
         while True:
-            # ブラウザからのメッセージを待機することで、接続を維持し続けます
-            # （ブラウザを閉じるとここで例外が発生し、切断処理へ移ります）
-            await websocket.receive_text()
+            # ブラウザからのメッセージを受け取る
+            data = await websocket.receive_json()
+
+            # 受け取ったメッセージのタイプに応じて処理を分岐
+            if data.get("type") == "REQUEST_ADD_UNDONE":
+                # 加算リクエスト
+                await manager.broadcast({
+                    "type": "ADD_UNDONE",
+                    "value": data.get("value", 0)
+                })
+            elif data.get("type") == "REQUEST_UPDATE_TOTAL":
+                # 総数更新リクエスト
+                await manager.broadcast({
+                    "type": "UPDATE_TOTAL",
+                    "value": data.get("value", 0)
+                })
+            elif data.get("type") == "REQUEST_UPDATE_UNDONE":
+                # 未消化数更新リクエスト
+                await manager.broadcast({
+                    "type": "UPDATE_UNDONE",
+                    "value": data.get("value", 0)
+                })
+
     except WebSocketDisconnect:
-        # ブラウザが正常に閉じられた場合
         logger.info("Disconnected normally")
     except Exception as e:
-        # 何らかのネットワークエラーが発生した場合
         logger.error(f"Unexpected error: {e}")
     finally:
-        # どのような理由で切断されても、必ずリストから削除を実行します
         manager.disconnect(websocket)
         logger.info("Cleanup for Client completed")
 
