@@ -4,8 +4,9 @@ import logging
 import os
 import pickle
 import sys
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+
 import uvicorn
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
 import global_value as g
 from config_helper import read_config
@@ -41,32 +42,53 @@ app = FastAPI()
 
 class ConnectionManager:
     def __init__(self):
+        # 接続中のブラウザを保持するリスト
         self.active_connections: list[WebSocket] = []
 
     async def connect(self, websocket: WebSocket):
+        """Reactクライアントの接続を受け入れ、リストに追加する"""
         await websocket.accept()
         self.active_connections.append(websocket)
 
     def disconnect(self, websocket: WebSocket):
-        self.active_connections.remove(websocket)
+        """リストから特定の接続を削除する。存在しない場合のエラーも考慮"""
+        if websocket in self.active_connections:
+            self.active_connections.remove(websocket)
 
     async def broadcast(self, message: dict):
-        for connection in self.active_connections:
+        """
+        接続されているすべてのクライアントへメッセージを送信する。
+        送信に失敗した（ブラウザを閉じた等）クライアントは自動で除外する。
+        """
+        # [:] を使うことで、送信中にリストが変更されてもループが壊れないようにします
+        for connection in self.active_connections[:]:
             try:
                 await connection.send_json(message)
-            except:
-                pass
+            except Exception:
+                # 送信に失敗したクライアントは、すでに切断されていると判断して掃除します
+                self.disconnect(connection)
 
 manager = ConnectionManager()
 
 @app.websocket("/workout")
 async def websocket_endpoint(websocket: WebSocket):
+    # クライアントの接続開始
     await manager.connect(websocket)
     try:
         while True:
-            await websocket.receive_text() # 接続維持のため
+            # ブラウザからのメッセージを待機することで、接続を維持し続けます
+            # （ブラウザを閉じるとここで例外が発生し、切断処理へ移ります）
+            await websocket.receive_text()
     except WebSocketDisconnect:
+        # ブラウザが正常に閉じられた場合
+        logger.info("Disconnected normally")
+    except Exception as e:
+        # 何らかのネットワークエラーが発生した場合
+        logger.error(f"Unexpected error: {e}")
+    finally:
+        # どのような理由で切断されても、必ずリストから削除を実行します
         manager.disconnect(websocket)
+        logger.info("Cleanup for Client completed")
 
 def load_is_first_on_stream() -> bool:
     if not os.path.isfile(FILENAME_MAP_IS_FIRST_ON_STREAM):
