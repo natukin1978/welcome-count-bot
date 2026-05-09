@@ -4,6 +4,8 @@ import logging
 import os
 import pickle
 import sys
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+import uvicorn
 
 import global_value as g
 from config_helper import read_config
@@ -35,6 +37,36 @@ g.list_is_first_on_stream = []
 g.set_exclude_name = read_text_set("exclude_name.txt")
 g.websocket_fuyuka = None
 
+app = FastAPI()
+
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: list[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections.remove(websocket)
+
+    async def broadcast(self, message: dict):
+        for connection in self.active_connections:
+            try:
+                await connection.send_json(message)
+            except:
+                pass
+
+manager = ConnectionManager()
+
+@app.websocket("/workout")
+async def websocket_endpoint(websocket: WebSocket):
+    await manager.connect(websocket)
+    try:
+        while True:
+            await websocket.receive_text() # 接続維持のため
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
 
 def load_is_first_on_stream() -> bool:
     if not os.path.isfile(FILENAME_MAP_IS_FIRST_ON_STREAM):
@@ -84,12 +116,20 @@ async def main():
 
             count = len(g.list_is_first_on_stream)
             logger.info("%s, count: %d", name, count, extra={'force': True})
+            await manager.broadcast({
+                "type": "ADD_UNDONE",
+                "value": 5,
+            })
 
         except json.JSONDecodeError:
             pass
 
     if is_continue and load_is_first_on_stream():
         print("挨拶キャッシュを復元しました。")
+
+    config = uvicorn.Config(app, host="0.0.0.0", port=38696, log_level="info")
+    server = uvicorn.Server(config)
+    asyncio.create_task(server.serve())
 
     fuyukaApi_baseUrl = get_fuyukaApi_baseUrl()
     if fuyukaApi_baseUrl:
