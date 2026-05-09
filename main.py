@@ -163,10 +163,12 @@ async def main():
 
             count = len(g.list_is_first_on_stream)
             logger.info("%s, count: %d", name, count, extra={'force': True})
-            await manager.broadcast({
-                "type": "ADD_UNDONE",
-                "value": 5,
-            })
+            welcome_add_undone_count = g.config["welcomeAddUndoneCount"]
+            if welcome_add_undone_count != 0:
+                await manager.broadcast({
+                    "type": "ADD_UNDONE",
+                    "value": welcome_add_undone_count,
+                })
 
         except json.JSONDecodeError:
             pass
