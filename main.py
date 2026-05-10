@@ -143,6 +143,7 @@ async def main():
                 # レスポンス付きなら処理しない
                 return
 
+            logger.info(json_data)
             data = json_data["request"]
             name = get_first_non_none_value(data, ["displayName", "id"])
             text = data["content"]
@@ -162,9 +163,10 @@ async def main():
             save_user_comment_on_stream()
 
             is_user_comment_on_stream = False
-            if json_data["id"] == "showroom_chat_bot" and comment_on_stream == 2:
-                # SHOWROOMのみ2カウント目が初見
-                is_user_comment_on_stream = True
+            if json_data["id"] == "showroom_chat_bot":
+                if comment_on_stream == 2:
+                    # SHOWROOMのみ2カウント目が初見
+                    is_user_comment_on_stream = True
             elif comment_on_stream == 1:
                 is_user_comment_on_stream = True
 
