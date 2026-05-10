@@ -3,5 +3,9 @@
   "fuyukaApi": {
     "baseUrl": "ws://127.0.0.1:38321"
   },
-  "welcomeAddUndoneCount": 0
+  "welcomeAddUndoneCount": {
+    "enable": False,
+    "first": 0,
+    "normal": 0
+  }
 }

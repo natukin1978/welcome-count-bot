@@ -147,6 +147,7 @@ async def main():
             data = json_data["request"]
             name = get_first_non_none_value(data, ["displayName", "id"])
             text = data["content"]
+            isFirst = get_first_non_none_value(data, ["isFirst"])
 
             if name in g.set_exclude_name:
                 # 無視する名前
@@ -175,11 +176,20 @@ async def main():
                 return
 
             logger.info("%s", name, extra={'force': True})
-            welcome_add_undone_count = g.config["welcomeAddUndoneCount"]
-            if welcome_add_undone_count != 0:
+
+            waudc = g.config["welcomeAddUndoneCount"]
+            if not waudc["enable"]:
+                return
+
+            value = 0
+            if isFirst:
+                value = waudc["first"]
+            else:
+                value = waudc["normal"]
+            if value != 0:
                 await manager.broadcast({
                     "type": "ADD_UNDONE",
-                    "value": welcome_add_undone_count,
+                    "value": value,
                 })
 
         except json.JSONDecodeError:
