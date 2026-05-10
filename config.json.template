@@ -4,7 +4,7 @@
     "baseUrl": "ws://127.0.0.1:38321"
   },
   "welcomeAddUndoneCount": {
-    "enable": False,
+    "enable": false,
     "first": 0,
     "normal": 0
   }
