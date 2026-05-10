@@ -34,6 +34,7 @@ FILENAME_MAP_USER_COMMENT_ON_STREAM = get_cache_filepath(
     f"{g.app_name}_map_user_comment_on_stream.pkl"
 )
 g.map_user_comment_on_stream = {}
+g.list_user_first = []
 
 g.set_exclude_name = read_text_set("exclude_name.txt")
 g.websocket_fuyuka = None
@@ -147,7 +148,12 @@ async def main():
             data = json_data["request"]
             name = get_first_non_none_value(data, ["displayName", "id"])
             text = data["content"]
-            isFirst = get_first_non_none_value(data, ["isFirst"])
+
+            if get_first_non_none_value(data, ["isFirst"]):
+                # この配信中のみで良いので、初見という事を記録しておく
+                g.list_user_first.append(name)
+
+            isFirst = name in g.list_user_first
 
             if name in g.set_exclude_name:
                 # 無視する名前
