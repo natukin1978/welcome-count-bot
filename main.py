@@ -30,10 +30,10 @@ from dict_helper import get_first_non_none_value
 from text_helper import read_text_set
 from websocket_helper import websocket_listen_forever
 
-FILENAME_MAP_IS_FIRST_ON_STREAM = get_cache_filepath(
-    f"{g.app_name}_map_is_first_on_stream.pkl"
+FILENAME_MAP_USER_COMMENT_ON_STREAM = get_cache_filepath(
+    f"{g.app_name}_map_user_comment_on_stream.pkl"
 )
-g.list_is_first_on_stream = []
+g.map_user_comment_on_stream = {}
 
 g.set_exclude_name = read_text_set("exclude_name.txt")
 g.websocket_fuyuka = None
@@ -115,16 +115,16 @@ async def websocket_endpoint(websocket: WebSocket):
         manager.disconnect(websocket)
         logger.info("Cleanup for Client completed")
 
-def load_is_first_on_stream() -> bool:
-    if not os.path.isfile(FILENAME_MAP_IS_FIRST_ON_STREAM):
+def load_user_comment_on_stream() -> bool:
+    if not os.path.isfile(FILENAME_MAP_USER_COMMENT_ON_STREAM):
         return False
-    with open(FILENAME_MAP_IS_FIRST_ON_STREAM, "rb") as f:
-        g.list_is_first_on_stream = pickle.load(f)
+    with open(FILENAME_MAP_USER_COMMENT_ON_STREAM, "rb") as f:
+        g.map_user_comment_on_stream = pickle.load(f)
         return True
 
-def save_is_first_on_stream() -> None:
-    with open(FILENAME_MAP_IS_FIRST_ON_STREAM, "wb") as f:
-        pickle.dump(g.list_is_first_on_stream, f)
+def save_user_comment_on_stream() -> None:
+    with open(FILENAME_MAP_USER_COMMENT_ON_STREAM, "wb") as f:
+        pickle.dump(g.map_user_comment_on_stream, f)
 
 async def main():
     def get_fuyukaApi_baseUrl() -> str:
@@ -150,19 +150,29 @@ async def main():
             if name in g.set_exclude_name:
                 # 無視する名前
                 return
-
-            if json_data["id"] == "showroom_chat_bot" and "ギフトをプレゼント" in text:
-                # SHOWROOM ギフトならスキップ
+            if not text:
+                # 空文字は集計しない
                 return
 
-            if name in g.list_is_first_on_stream:
+            comment_on_stream = 1
+            if name in g.map_user_comment_on_stream:
+                comment_on_stream = g.map_user_comment_on_stream[name]
+                comment_on_stream += 1
+            g.map_user_comment_on_stream[name] = comment_on_stream
+            save_user_comment_on_stream()
+
+            is_user_comment_on_stream = False
+            if json_data["id"] == "showroom_chat_bot" and comment_on_stream == 2:
+                # SHOWROOMのみ2カウント目が初見
+                is_user_comment_on_stream = True
+            elif comment_on_stream == 1:
+                is_user_comment_on_stream = True
+
+            if not is_user_comment_on_stream:
                 # 集計済み
                 return
-            g.list_is_first_on_stream.append(name)
-            save_is_first_on_stream()
 
-            count = len(g.list_is_first_on_stream)
-            logger.info("%s, count: %d", name, count, extra={'force': True})
+            logger.info("%s", name, extra={'force': True})
             welcome_add_undone_count = g.config["welcomeAddUndoneCount"]
             if welcome_add_undone_count != 0:
                 await manager.broadcast({
@@ -173,7 +183,7 @@ async def main():
         except json.JSONDecodeError:
             pass
 
-    if is_continue and load_is_first_on_stream():
+    if is_continue and load_user_comment_on_stream():
         print("挨拶キャッシュを復元しました。")
 
     config = uvicorn.Config(app, host="0.0.0.0", port=38696, log_level="info")
