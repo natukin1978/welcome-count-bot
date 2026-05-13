@@ -231,8 +231,8 @@ async def main():
                 return
 
             # --- 1. モード開始判定 (正規表現) ---
-            # 「筋トレ」を含み、かつ「消化・始めます・開始」のいずれかを含む
-            if re.search(r'筋トレ.*(消化|始めます|開始)', text):
+            # 「筋トレ」を含み、かつカッコ内のいずれかを含む
+            if re.search(r'筋トレ.*(消化|始め|開始|します|やります)', text):
                 manager.is_voice_mode = True
                 manager.last_number = None
                 print(">>> 音声認識消化モード：開始")
