@@ -50,7 +50,7 @@ class ConnectionManager:
         self.total = 0
         self.undone = 0
         self.is_voice_mode = False
-        self.last_voice_number = None
+        self.last_number = None
 
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
@@ -234,7 +234,7 @@ async def main():
             # 「筋トレ」を含み、かつ「消化・始めます・開始」のいずれかを含む
             if re.search(r'筋トレ.*(消化|始めます|開始)', text):
                 manager.is_voice_mode = True
-                manager.last_voice_number = None
+                manager.last_number = None
                 print(">>> 音声認識消化モード：開始")
                 return
 
@@ -242,37 +242,46 @@ async def main():
             val = kanji_to_int(text)
 
             if val is not None and manager.is_voice_mode:
-                # 初回受信時：基準値を記録
-                if manager.last_voice_number is None:
+                # --- 修正箇所：初回数値受信 ---
+                if manager.last_number is None:
                     if val < manager.undone:
-                        manager.last_voice_number = val
-                        print(f"基準値を設定: {val}")
+                        # 初回の発声（例：「4」）の時点で1回分を消化する
+                        manager.undone = max(0, manager.undone - 1)
+                        manager.total += 1
+                        manager.last_number = val
 
-                # 2回目以降：前回との差分で減らす
-                else:
-                    if val < manager.last_voice_number:
-                        diff = manager.last_voice_number - val
+                        print(f"カウントダウン開始（基準: {val} / 初回分を消化）")
 
-                        # 状態を更新
-                        manager.undone = max(0, manager.undone - diff)
-                        manager.total += diff
-                        manager.last_voice_number = val
-
-                        print(f"音声消化: {diff}回 (残り数値: {val})")
-
-                        # WebSocketでクライアントに通知
+                        # 初回分のアニメーションを飛ばすために通知
                         await manager.broadcast({
-                            "type": "DIGEST_MULTI", # 差分消化用の新しいタイプ
+                            "type": "DIGEST",
                             "total": manager.total,
-                            "undone": manager.undone,
-                            "diff": diff
+                            "undone": manager.undone
                         })
 
-                    # 0になったらモード終了
+                # --- 2回目以降：前回値より小さい場合のみ差分を適用 ---
+                elif val < manager.last_number:
+                    diff = manager.last_number - val
+
+                    manager.undone = max(0, manager.undone - diff)
+                    manager.total += diff
+                    manager.last_number = val
+
+                    print(f"音声消化反映: -{diff} (現在値: {val})")
+
+                    # 複数回分（数値が飛んだ場合など）に対応した通知
+                    await manager.broadcast({
+                        "type": "DIGEST_MULTI",
+                        "total": manager.total,
+                        "undone": manager.undone,
+                        "diff": diff
+                    })
+
+                    # 0に到達したらモード終了
                     if val == 0:
                         manager.is_voice_mode = False
-                        manager.last_voice_number = None
-                        print(">>> 音声認識消化モード：終了")
+                        manager.last_number = None
+                        print(">>> 音声認識消化モード：完了により終了")
 
     if is_continue and load_user_comment_on_stream():
         print("挨拶キャッシュを復元しました。")
