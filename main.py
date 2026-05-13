@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import pickle
+import re
 import sys
 
 import uvicorn
@@ -29,6 +30,7 @@ from cache_helper import get_cache_filepath
 from dict_helper import get_first_non_none_value
 from text_helper import read_text_set
 from websocket_helper import websocket_listen_forever
+from zenkaku_helper import kanji_to_int
 
 FILENAME_MAP_USER_COMMENT_ON_STREAM = get_cache_filepath(
     f"{g.app_name}_map_user_comment_on_stream.pkl"
@@ -47,6 +49,8 @@ class ConnectionManager:
         # サーバー側で数値を管理（初期値）
         self.total = 0
         self.undone = 0
+        self.is_voice_mode = False
+        self.last_voice_number = None
 
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
@@ -136,6 +140,14 @@ async def main():
             return ""
         return conf_fa["baseUrl"]
 
+    def get_neoInnerApi_baseUrl() -> str:
+        conf_nia = g.config["neoInnerApi"]
+        if not conf_nia:
+            return ""
+        if not get_first_non_none_value(conf_nia, ["enable"]):
+            return ""
+        return conf_nia["baseUrl"]
+
     def set_ws_fuyuka(ws) -> None:
         g.websocket_fuyuka = ws
 
@@ -203,6 +215,65 @@ async def main():
         except json.JSONDecodeError:
             pass
 
+    async def recv_talk_text(message: str) -> None:
+        try:
+            data = json.loads(message)
+            if type(data) is not dict:
+                raise json.JSONDecodeError("result value was not dict", "", "")
+            # JSONとして処理する
+            # もし取り込む値があるなら取り込む
+        except json.JSONDecodeError:
+            # プレーンテキストとして処理する
+            text = message.strip()
+
+            # if not text or text.endswith("..."):
+            if not text:
+                return
+
+            # --- 1. モード開始判定 (正規表現) ---
+            # 「筋トレ」を含み、かつ「消化・始めます・開始」のいずれかを含む
+            if re.search(r'筋トレ.*(消化|始めます|開始)', text):
+                manager.is_voice_mode = True
+                manager.last_voice_number = None
+                print(">>> 音声認識消化モード：開始")
+                return
+
+            # --- 2. 数値の解析 ---
+            val = kanji_to_int(text)
+
+            if val is not None and manager.is_voice_mode:
+                # 初回受信時：基準値を記録
+                if manager.last_voice_number is None:
+                    if val < manager.undone:
+                        manager.last_voice_number = val
+                        print(f"基準値を設定: {val}")
+
+                # 2回目以降：前回との差分で減らす
+                else:
+                    if val < manager.last_voice_number:
+                        diff = manager.last_voice_number - val
+
+                        # 状態を更新
+                        manager.undone = max(0, manager.undone - diff)
+                        manager.total += diff
+                        manager.last_voice_number = val
+
+                        print(f"音声消化: {diff}回 (残り数値: {val})")
+
+                        # WebSocketでクライアントに通知
+                        await manager.broadcast({
+                            "type": "DIGEST_MULTI", # 差分消化用の新しいタイプ
+                            "total": manager.total,
+                            "undone": manager.undone,
+                            "diff": diff
+                        })
+
+                    # 0になったらモード終了
+                    if val == 0:
+                        manager.is_voice_mode = False
+                        manager.last_voice_number = None
+                        print(">>> 音声認識消化モード：終了")
+
     if is_continue and load_user_comment_on_stream():
         print("挨拶キャッシュを復元しました。")
 
@@ -216,6 +287,11 @@ async def main():
         asyncio.create_task(
             websocket_listen_forever(websocket_uri, recv_fuyuka_response, set_ws_fuyuka)
         )
+
+    neoInnerApi_baseUrl = get_neoInnerApi_baseUrl()
+    if neoInnerApi_baseUrl:
+        websocket_uri = f"{neoInnerApi_baseUrl}/textonly"
+        asyncio.create_task(websocket_listen_forever(websocket_uri, recv_talk_text))
 
     try:
         await asyncio.Future()

@@ -4,6 +4,10 @@
     "enable": false,
     "baseUrl": "ws://127.0.0.1:38321"
   },
+  "neoInnerApi": {
+    "enable": false,
+    "baseUrl": "ws://127.0.0.1:30000"
+  },
   "welcomeAddUndoneCount": {
     "enable": false,
     "first": 0,
