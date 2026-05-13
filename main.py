@@ -132,6 +132,8 @@ async def main():
         conf_fa = g.config["fuyukaApi"]
         if not conf_fa:
             return ""
+        if not get_first_non_none_value(conf_fa, ["enable"]):
+            return ""
         return conf_fa["baseUrl"]
 
     def set_ws_fuyuka(ws) -> None:

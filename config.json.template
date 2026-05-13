@@ -1,6 +1,7 @@
 {
   "logLevel": "WARNING",
   "fuyukaApi": {
+    "enable": false,
     "baseUrl": "ws://127.0.0.1:38321"
   },
   "welcomeAddUndoneCount": {
