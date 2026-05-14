@@ -35,7 +35,6 @@ from websocket_helper import websocket_listen_forever
 from zenkaku_helper import kanji_to_int
 
 g.set_exclude_name = read_text_set("exclude_name.txt")
-g.websocket_fuyuka = None
 
 app = FastAPI()
 
@@ -323,9 +322,6 @@ async def main():
             return ""
         return conf_nia["baseUrl"]
 
-    def set_ws_fuyuka(ws) -> None:
-        g.websocket_fuyuka = ws
-
     if is_continue and manager.load_state():
         print("状態を復元しました。")
 
@@ -336,9 +332,7 @@ async def main():
     fuyukaApi_baseUrl = get_fuyukaApi_baseUrl()
     if fuyukaApi_baseUrl:
         websocket_uri = f"{fuyukaApi_baseUrl}/chat/{g.app_name}"
-        asyncio.create_task(
-            websocket_listen_forever(websocket_uri, recv_fuyuka_response, set_ws_fuyuka)
-        )
+        asyncio.create_task(websocket_listen_forever(websocket_uri, recv_fuyuka_response))
 
     neoInnerApi_baseUrl = get_neoInnerApi_baseUrl()
     if neoInnerApi_baseUrl:
