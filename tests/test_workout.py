@@ -38,6 +38,36 @@ class TestWorkoutLogic(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.manager.undone, 45)
         self.assertEqual(self.manager.total, 105)
 
+    async def test_undone_increase_after_last_number_set(self):
+        """基準値決定(初回の1回消化)後にundoneを10加算した場合の計算テスト"""
+        # 1. 音声モード開始と初期状態の設定
+        await main.recv_talk_text("筋トレ開始")
+        self.manager.undone = 40
+        self.manager.total = 100
+
+        # 2. 初回の数値「39」を受信
+        # 40 -> 39 への変化（1回消化）が発生し、基準値(last_number)が39になる
+        await main.recv_talk_text("39")
+        self.assertEqual(self.manager.undone, 39)
+        self.assertEqual(self.manager.total, 101)
+        self.assertEqual(self.manager.last_number, 39)
+
+        # 3. 外部要因（UIの追加ボタンなど）で undone を 10 加算
+        # 39 + 10 = 49 になる
+        self.manager.undone += 10
+        self.assertEqual(self.manager.undone, 49)
+
+        # 4. 次の数値「35」を受信
+        # 期待される計算:
+        # 差分: 基準値(39) - 今回の値(35) = 4 消化
+        # undone: 49(加算後) - 4 = 45
+        # total: 101(前回) + 4 = 105
+        await main.recv_talk_text("35")
+
+        self.assertEqual(self.manager.undone, 45)
+        self.assertEqual(self.manager.total, 105)
+        self.assertEqual(self.manager.last_number, 35)
+
     async def test_mode_end_at_zero(self):
         """「0」でモードが終了するかテスト"""
         self.manager.is_voice_mode = True
