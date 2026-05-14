@@ -2,7 +2,6 @@ import asyncio
 import json
 import logging
 import os
-import pickle
 import re
 import sys
 
@@ -14,11 +13,14 @@ from config_helper import read_config
 from input_helper import input_with_timeout
 from logging_setup import setup_app_logging
 
+is_testing = os.environ.get("APP_TESTING") == "True"
+
 g.app_name = "welcome_count_bot"
 g.base_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
 
-res = input_with_timeout("前回の続きですか？(y/n) [10秒以内に未入力なら 'n']: ", timeout=10)
-is_continue = (res == "y")
+if not is_testing:
+    res = input_with_timeout("前回の続きですか？(y/n) [10秒以内に未入力なら 'n']: ", timeout=10)
+    is_continue = (res == "y")
 
 g.config = read_config()
 
@@ -32,10 +34,6 @@ from text_helper import read_text_set
 from websocket_helper import websocket_listen_forever
 from zenkaku_helper import kanji_to_int
 
-FILENAME_MAP_USER_COMMENT_ON_STREAM = get_cache_filepath(
-    f"{g.app_name}_map_user_comment_on_stream.pkl"
-)
-g.map_user_comment_on_stream = {}
 g.list_user_first = []
 
 g.set_exclude_name = read_text_set("exclude_name.txt")
@@ -46,10 +44,46 @@ app = FastAPI()
 class ConnectionManager:
     def __init__(self):
         self.active_connections: list[WebSocket] = []
+        self.save_file = get_cache_filepath(f"{g.app_name}_app_state.json")
+
+        self.map_user_comment_on_stream = {}
         self.total = 0
         self.undone = 0
+
         self.is_voice_mode = False
         self.last_number = None
+
+    # --- 状態を保存するメソッド ---
+    def save_state(self):
+        state = {
+            "map_user_comment_on_stream": self.map_user_comment_on_stream,
+            "total": self.total,
+            "undone": self.undone,
+        }
+        with open(self.save_file, "w", encoding="utf-8") as f:
+            json.dump(state, f, ensure_ascii=False, indent=2)
+
+    # --- 状態を復元するメソッド ---
+    def load_state(self):
+        """保存ファイルからデータを読み込み、自身の変数を更新する"""
+        if not os.path.exists(self.save_file):
+            return False
+
+        try:
+            with open(self.save_file, "r", encoding="utf-8") as f:
+                state = json.load(f)
+
+            # 各変数をファイルの内容で上書き
+            # 辞書の get(キー, デフォルト値) を使うことで、キーがなくても壊れないようにします
+            self.map_user_comment_on_stream = state.get("map_user_comment_on_stream", {})
+            self.total = state.get("total", 0)
+            self.undone = state.get("undone", 0)
+
+            return True
+        except (json.JSONDecodeError, IOError):
+            # ファイルが壊れている場合などのエラーハンドリング
+            print("警告: 状態ファイルの読み込みに失敗しました。")
+            return False
 
     # --- 改善ポイント: 数値更新と通知をセットで行うメソッド ---
     async def update_and_broadcast(self, msg_type: str, total: int = None, undone: int = None, diff: int = 0):
@@ -139,17 +173,6 @@ async def websocket_endpoint(websocket: WebSocket):
         manager.disconnect(websocket)
         logger.info("Cleanup for Client completed")
 
-def load_user_comment_on_stream() -> bool:
-    if not os.path.isfile(FILENAME_MAP_USER_COMMENT_ON_STREAM):
-        return False
-    with open(FILENAME_MAP_USER_COMMENT_ON_STREAM, "rb") as f:
-        g.map_user_comment_on_stream = pickle.load(f)
-        return True
-
-def save_user_comment_on_stream() -> None:
-    with open(FILENAME_MAP_USER_COMMENT_ON_STREAM, "wb") as f:
-        pickle.dump(g.map_user_comment_on_stream, f)
-
 async def recv_fuyuka_response(message: str) -> None:
     try:
         json_data = json.loads(message)
@@ -176,11 +199,11 @@ async def recv_fuyuka_response(message: str) -> None:
             return
 
         comment_on_stream = 1
-        if name in g.map_user_comment_on_stream:
-            comment_on_stream = g.map_user_comment_on_stream[name]
+        if name in manager.map_user_comment_on_stream:
+            comment_on_stream = manager.map_user_comment_on_stream[name]
             comment_on_stream += 1
-        g.map_user_comment_on_stream[name] = comment_on_stream
-        save_user_comment_on_stream()
+        manager.map_user_comment_on_stream[name] = comment_on_stream
+        manager.save_state()
 
         is_user_comment_on_stream = False
         if json_data["id"] == "showroom_chat_bot":
@@ -284,8 +307,8 @@ async def main():
     def set_ws_fuyuka(ws) -> None:
         g.websocket_fuyuka = ws
 
-    if is_continue and load_user_comment_on_stream():
-        print("挨拶キャッシュを復元しました。")
+    if is_continue and manager.load_state():
+        print("状態を復元しました。")
 
     config = uvicorn.Config(app, host="0.0.0.0", port=38696, log_level="info")
     server = uvicorn.Server(config)
