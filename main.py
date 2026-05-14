@@ -301,6 +301,12 @@ async def recv_talk_text(message: str) -> None:
                 await manager.broadcast({"type": "MODE_CHANGE", "value": "normal"})
 
 async def main():
+    def get_workoutApi_port() -> int:
+        conf_fa = g.config["workoutApi"]
+        if not conf_fa:
+            return 0
+        return conf_fa["port"]
+
     def get_fuyukaApi_baseUrl() -> str:
         conf_fa = g.config["fuyukaApi"]
         if not conf_fa:
@@ -323,7 +329,7 @@ async def main():
     if is_continue and manager.load_state():
         print("状態を復元しました。")
 
-    config = uvicorn.Config(app, host="0.0.0.0", port=38696, log_level="info")
+    config = uvicorn.Config(app, host="0.0.0.0", port=get_workoutApi_port(), log_level=g.config["logLevel"])
     server = uvicorn.Server(config)
     asyncio.create_task(server.serve())
 
