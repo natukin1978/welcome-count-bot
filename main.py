@@ -68,6 +68,17 @@ class ConnectionManager:
 
         await self.broadcast(payload)
 
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+        # 接続した瞬間に、現在の最新状態をそのクライアントだけに送る
+        await websocket.send_json({
+            "type": "SYNC_STATE",
+            "total": self.total,
+            "undone": self.undone,
+        })
+
     def disconnect(self, websocket: WebSocket):
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
