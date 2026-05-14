@@ -93,7 +93,17 @@ async def websocket_endpoint(websocket: WebSocket):
             data = await websocket.receive_json()
 
             # 受け取ったメッセージのタイプに応じて処理を分岐
-            if data.get("type") == "REQUEST_ADD_UNDONE":
+            if data.get("type") == "SET_MODE":
+                new_mode = data["value"]
+                manager.is_voice_mode = (new_mode == "voice")
+                if not manager.is_voice_mode:
+                    manager.last_number = None # 記録をリセット
+                # 他の全クライアント（オーバーレイ等）にモード変更を同期
+                await manager.broadcast({
+                    "type": "MODE_CHANGE",
+                    "value": new_mode
+                })
+            elif data.get("type") == "REQUEST_ADD_UNDONE":
                 # 加算リクエスト
                 await manager.broadcast({
                     "type": "ADD_UNDONE",
@@ -235,17 +245,21 @@ async def main():
             if re.search(r'筋トレ.*(消化|始め|開始|します|やります)', text):
                 manager.is_voice_mode = True
                 manager.last_number = None
-                print(">>> 音声認識消化モード：開始")
-                return
+                print(">>> 音声認識消化モード：開始（自動検知）")
+
+                # UI側の表示を「音声認識消化」に同期させるための通知
+                await manager.broadcast({
+                    "type": "MODE_CHANGE",
+                    "value": "voice"
+                })
 
             # --- 2. 数値の解析 ---
             val = kanji_to_int(text)
 
             if val is not None and manager.is_voice_mode:
-                # --- 修正箇所：初回数値受信 ---
+                # 初回数値受信
                 if manager.last_number is None:
                     if val < manager.undone:
-                        # 初回の発声（例：「4」）の時点で1回分を消化する
                         manager.undone = max(0, manager.undone - 1)
                         manager.total += 1
                         manager.last_number = val
@@ -259,10 +273,9 @@ async def main():
                             "undone": manager.undone
                         })
 
-                # --- 2回目以降：前回値より小さい場合のみ差分を適用 ---
+                # 2回目以降の差分計算
                 elif val < manager.last_number:
                     diff = manager.last_number - val
-
                     manager.undone = max(0, manager.undone - diff)
                     manager.total += diff
                     manager.last_number = val
@@ -277,11 +290,17 @@ async def main():
                         "diff": diff
                     })
 
-                    # 0に到達したらモード終了
+                    # --- モード終了判定と通知 ---
                     if val == 0:
                         manager.is_voice_mode = False
                         manager.last_number = None
-                        print(">>> 音声認識消化モード：完了により終了")
+                        print(">>> 音声認識消化モード：完了（自動終了）")
+
+                        # フロントエンドのラジオボタンを「通常」に戻すための通知
+                        await manager.broadcast({
+                            "type": "MODE_CHANGE",
+                            "value": "normal"
+                        })
 
     if is_continue and load_user_comment_on_stream():
         print("挨拶キャッシュを復元しました。")
