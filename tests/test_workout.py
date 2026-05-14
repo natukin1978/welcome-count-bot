@@ -5,7 +5,6 @@ import main  # main.pyをインポート
 
 
 class TestWorkoutLogic(unittest.IsolatedAsyncioTestCase):
-
     async def asyncSetUp(self):
         self.manager = main.ConnectionManager()
         self.manager.broadcast = AsyncMock()

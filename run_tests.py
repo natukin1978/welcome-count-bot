@@ -6,6 +6,8 @@ import global_value as g
 
 g.base_dir = os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), "tests")
 
+# テスト実行中であることを示すフラグをセット
+os.environ["APP_TESTING"] = "True"
 
 def main(path):
     loader = TestLoader()
