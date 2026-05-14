@@ -339,12 +339,18 @@ async def main():
         websocket_uri = f"{neoInnerApi_baseUrl}/textonly"
         asyncio.create_task(websocket_listen_forever(websocket_uri, recv_talk_text))
 
+    while not server.started:
+        await asyncio.sleep(0.1)
+
+    caption = "筋トレ(Workout API)"
+    logger.info(caption + "スタートしました。", extra={'force': True})
+
     try:
         await asyncio.Future()
     except KeyboardInterrupt:
         pass
     finally:
-        pass
+        logger.info(caption + "終了しました。", extra={'force': True})
 
 
 if __name__ == "__main__":
