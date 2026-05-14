@@ -34,8 +34,6 @@ from text_helper import read_text_set
 from websocket_helper import websocket_listen_forever
 from zenkaku_helper import kanji_to_int
 
-g.list_user_first = []
-
 g.set_exclude_name = read_text_set("exclude_name.txt")
 g.websocket_fuyuka = None
 
@@ -47,6 +45,7 @@ class ConnectionManager:
         self.save_file = get_cache_filepath(f"{g.app_name}_app_state.json")
 
         self.map_user_comment_on_stream = {}
+        self.list_user_first = []
         self.total = 0
         self.undone = 0
 
@@ -57,6 +56,7 @@ class ConnectionManager:
     def save_state(self):
         state = {
             "map_user_comment_on_stream": self.map_user_comment_on_stream,
+            "list_user_first": self.list_user_first,
             "total": self.total,
             "undone": self.undone,
         }
@@ -76,6 +76,7 @@ class ConnectionManager:
             # 各変数をファイルの内容で上書き
             # 辞書の get(キー, デフォルト値) を使うことで、キーがなくても壊れないようにします
             self.map_user_comment_on_stream = state.get("map_user_comment_on_stream", {})
+            self.list_user_first = state.get("list_user_first", [])
             self.total = state.get("total", 0)
             self.undone = state.get("undone", 0)
 
@@ -100,6 +101,7 @@ class ConnectionManager:
             # 個別更新の場合は value キーで送る既存の React 仕様に合わせる
             payload["value"] = total if "TOTAL" in msg_type else undone
 
+        self.save_state()
         await self.broadcast(payload)
 
     async def connect(self, websocket: WebSocket):
@@ -187,9 +189,9 @@ async def recv_fuyuka_response(message: str) -> None:
 
         if get_first_non_none_value(data, ["isFirst"]):
             # この配信中のみで良いので、初見という事を記録しておく
-            g.list_user_first.append(name)
+            manager.list_user_first.append(name)
 
-        isFirst = name in g.list_user_first
+        isFirst = name in manager.list_user_first
 
         if name in g.set_exclude_name:
             # 無視する名前
