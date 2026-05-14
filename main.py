@@ -54,6 +54,9 @@ class ConnectionManager:
 
     # --- 状態を保存するメソッド ---
     def save_state(self):
+        if is_testing:
+            # テスト中は保存させない
+            return
         state = {
             "map_user_comment_on_stream": self.map_user_comment_on_stream,
             "list_user_first": self.list_user_first,
@@ -86,22 +89,33 @@ class ConnectionManager:
             print("警告: 状態ファイルの読み込みに失敗しました。")
             return False
 
-    # --- 改善ポイント: 数値更新と通知をセットで行うメソッド ---
-    async def update_and_broadcast(self, msg_type: str, total: int = None, undone: int = None, diff: int = 0):
-        """数値を更新し、全クライアントへ通知する"""
+    async def update_and_broadcast(self, msg_type: str, total: int = None, undone: int = None, diff: int = 0, value: int = None):
+        """数値を更新し、保存し、全クライアントへ通知する"""
         if total is not None:
             self.total = total
         if undone is not None:
             self.undone = undone
 
+        # 直接数値を指定する場合（UIからのリクエストなど）
+        if value is not None:
+            if "TOTAL" in msg_type:
+                self.total = value
+            if "UNDONE" in msg_type:
+                if "ADD" in msg_type:
+                    self.undone += value
+                else:
+                    self.undone = value
+
+        # 状態をファイルに保存
+        self.save_state()
+
+        # 通知用ペイロード作成
         payload = {"type": msg_type, "total": self.total, "undone": self.undone}
         if diff > 0:
             payload["diff"] = diff
-        elif msg_type in ["UPDATE_TOTAL", "UPDATE_UNDONE", "ADD_UNDONE"]:
-            # 個別更新の場合は value キーで送る既存の React 仕様に合わせる
-            payload["value"] = total if "TOTAL" in msg_type else undone
+        if value is not None:
+            payload["value"] = value
 
-        self.save_state()
         await self.broadcast(payload)
 
     async def connect(self, websocket: WebSocket):
@@ -148,24 +162,21 @@ async def websocket_endpoint(websocket: WebSocket):
                     "type": "MODE_CHANGE",
                     "value": new_mode
                 })
+
             elif data.get("type") == "REQUEST_ADD_UNDONE":
-                # 加算リクエスト
-                await manager.broadcast({
-                    "type": "ADD_UNDONE",
-                    "value": data.get("value", 0)
-                })
+                # 未消化加算
+                val = data.get("value", 0)
+                await manager.update_and_broadcast("ADD_UNDONE", value=val)
+
             elif data.get("type") == "REQUEST_UPDATE_TOTAL":
-                # 総数更新リクエスト
-                await manager.broadcast({
-                    "type": "UPDATE_TOTAL",
-                    "value": data.get("value", 0)
-                })
+                # 総数直接更新
+                val = data.get("value", 0)
+                await manager.update_and_broadcast("UPDATE_TOTAL", value=val)
+
             elif data.get("type") == "REQUEST_UPDATE_UNDONE":
-                # 未消化数更新リクエスト
-                await manager.broadcast({
-                    "type": "UPDATE_UNDONE",
-                    "value": data.get("value", 0)
-                })
+                # 未消化直接更新
+                val = data.get("value", 0)
+                await manager.update_and_broadcast("UPDATE_UNDONE", value=val)
 
     except WebSocketDisconnect:
         logger.info("Disconnected normally")
