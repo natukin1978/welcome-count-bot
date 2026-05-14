@@ -36,12 +36,17 @@ class TestZenkakuHelper(unittest.TestCase):
         self.assertEqual(kanji_to_int("中九"), 19)
         self.assertEqual(kanji_to_int("中"), 10)
 
-    def test_with_punctuation(self):
-        """句読点などが含まれる場合のテスト"""
+    def test_with_symbols(self):
+        """記号のみ許容するケース（ゆかコネ等の標準的な末尾文字）"""
+        self.assertEqual(kanji_to_int("5。"), 5)
         self.assertEqual(kanji_to_int("二十九。"), 29)
-        self.assertEqual(kanji_to_int("！三"), 3)
+        self.assertEqual(kanji_to_int("十！"), 10)
 
     def test_invalid_input(self):
-        """無効な入力のテスト"""
+        """無効な入力（文章や助数詞付き）のテスト"""
+        # 純粋な数値以外が混じっているためNoneになるべき
         self.assertIsNone(kanji_to_int("あいうえお"))
+        self.assertIsNone(kanji_to_int("十五回やります。"))
+        self.assertIsNone(kanji_to_int("5回"))
+        self.assertIsNone(kanji_to_int("第1"))
         self.assertIsNone(kanji_to_int(""))
