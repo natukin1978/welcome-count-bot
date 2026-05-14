@@ -139,6 +139,120 @@ def save_user_comment_on_stream() -> None:
     with open(FILENAME_MAP_USER_COMMENT_ON_STREAM, "wb") as f:
         pickle.dump(g.map_user_comment_on_stream, f)
 
+async def recv_fuyuka_response(message: str) -> None:
+    try:
+        json_data = json.loads(message)
+        if "response" in json_data:
+            # レスポンス付きなら処理しない
+            return
+
+        logger.info(json_data)
+        data = json_data["request"]
+        name = get_first_non_none_value(data, ["displayName", "id"])
+        text = data["content"]
+
+        if get_first_non_none_value(data, ["isFirst"]):
+            # この配信中のみで良いので、初見という事を記録しておく
+            g.list_user_first.append(name)
+
+        isFirst = name in g.list_user_first
+
+        if name in g.set_exclude_name:
+            # 無視する名前
+            return
+        if not text:
+            # 空文字は集計しない
+            return
+
+        comment_on_stream = 1
+        if name in g.map_user_comment_on_stream:
+            comment_on_stream = g.map_user_comment_on_stream[name]
+            comment_on_stream += 1
+        g.map_user_comment_on_stream[name] = comment_on_stream
+        save_user_comment_on_stream()
+
+        is_user_comment_on_stream = False
+        if json_data["id"] == "showroom_chat_bot":
+            if comment_on_stream == 2:
+                # SHOWROOMのみ2カウント目が初見
+                is_user_comment_on_stream = True
+        elif comment_on_stream == 1:
+            is_user_comment_on_stream = True
+
+        if not is_user_comment_on_stream:
+            # 集計済み
+            return
+
+        logger.info("%s", name, extra={'force': True})
+
+        waudc = g.config["welcomeAddUndoneCount"]
+        if not waudc["enable"]:
+            return
+
+        value = 0
+        if isFirst:
+            value = waudc["first"]
+        else:
+            value = waudc["normal"]
+        if value != 0:
+            await manager.broadcast({
+                "type": "ADD_UNDONE",
+                "value": value,
+            })
+
+    except json.JSONDecodeError:
+        pass
+
+async def recv_talk_text(message: str) -> None:
+    try:
+        data = json.loads(message)
+        if type(data) is not dict:
+            raise json.JSONDecodeError("result value was not dict", "", 0)
+        # JSONとして処理する
+        # もし取り込む値があるなら取り込む
+    except json.JSONDecodeError:
+        # プレーンテキストとして処理する
+        text = message.strip()
+
+        # if not text or text.endswith("..."):
+        if not text:
+            return
+
+        # 1. モード開始判定
+        if re.search(r'筋トレ.*(消化|始め|開始|します|やります)', text):
+            manager.is_voice_mode = True
+            manager.last_number = None
+            await manager.broadcast({"type": "MODE_CHANGE", "value": "voice"})
+            return # 開始した回は数値処理をスキップ（誤作動防止）
+
+        # 2. 数値解析と音声モード処理
+        val = kanji_to_int(text)
+        if val is None or not manager.is_voice_mode:
+            return
+
+        # 初回数値受信
+        if manager.last_number is None:
+            if val < manager.undone:
+                manager.last_number = val
+                await manager.update_and_broadcast("DIGEST", total=manager.total + 1, undone=max(0, manager.undone - 1))
+            return
+
+        # 2回目以降の差分計算
+        if val < manager.last_number:
+            diff = manager.last_number - val
+            manager.last_number = val
+
+            await manager.update_and_broadcast("DIGEST_MULTI",
+                                               total=manager.total + diff,
+                                               undone=max(0, manager.undone - diff),
+                                               diff=diff)
+
+            # モード終了判定
+            if val == 0:
+                manager.is_voice_mode = False
+                manager.last_number = None
+                await manager.broadcast({"type": "MODE_CHANGE", "value": "normal"})
+
 async def main():
     def get_fuyukaApi_baseUrl() -> str:
         conf_fa = g.config["fuyukaApi"]
@@ -158,120 +272,6 @@ async def main():
 
     def set_ws_fuyuka(ws) -> None:
         g.websocket_fuyuka = ws
-
-    async def recv_fuyuka_response(message: str) -> None:
-        try:
-            json_data = json.loads(message)
-            if "response" in json_data:
-                # レスポンス付きなら処理しない
-                return
-
-            logger.info(json_data)
-            data = json_data["request"]
-            name = get_first_non_none_value(data, ["displayName", "id"])
-            text = data["content"]
-
-            if get_first_non_none_value(data, ["isFirst"]):
-                # この配信中のみで良いので、初見という事を記録しておく
-                g.list_user_first.append(name)
-
-            isFirst = name in g.list_user_first
-
-            if name in g.set_exclude_name:
-                # 無視する名前
-                return
-            if not text:
-                # 空文字は集計しない
-                return
-
-            comment_on_stream = 1
-            if name in g.map_user_comment_on_stream:
-                comment_on_stream = g.map_user_comment_on_stream[name]
-                comment_on_stream += 1
-            g.map_user_comment_on_stream[name] = comment_on_stream
-            save_user_comment_on_stream()
-
-            is_user_comment_on_stream = False
-            if json_data["id"] == "showroom_chat_bot":
-                if comment_on_stream == 2:
-                    # SHOWROOMのみ2カウント目が初見
-                    is_user_comment_on_stream = True
-            elif comment_on_stream == 1:
-                is_user_comment_on_stream = True
-
-            if not is_user_comment_on_stream:
-                # 集計済み
-                return
-
-            logger.info("%s", name, extra={'force': True})
-
-            waudc = g.config["welcomeAddUndoneCount"]
-            if not waudc["enable"]:
-                return
-
-            value = 0
-            if isFirst:
-                value = waudc["first"]
-            else:
-                value = waudc["normal"]
-            if value != 0:
-                await manager.broadcast({
-                    "type": "ADD_UNDONE",
-                    "value": value,
-                })
-
-        except json.JSONDecodeError:
-            pass
-
-    async def recv_talk_text(message: str) -> None:
-        try:
-            data = json.loads(message)
-            if type(data) is not dict:
-                raise json.JSONDecodeError("result value was not dict", "", "")
-            # JSONとして処理する
-            # もし取り込む値があるなら取り込む
-        except json.JSONDecodeError:
-            # プレーンテキストとして処理する
-            text = message.strip()
-
-            # if not text or text.endswith("..."):
-            if not text:
-                return
-
-            # 1. モード開始判定
-            if re.search(r'筋トレ.*(消化|始め|開始|します|やります)', text):
-                manager.is_voice_mode = True
-                manager.last_number = None
-                await manager.broadcast({"type": "MODE_CHANGE", "value": "voice"})
-                return # 開始した回は数値処理をスキップ（誤作動防止）
-
-            # 2. 数値解析と音声モード処理
-            val = kanji_to_int(text)
-            if val is None or not manager.is_voice_mode:
-                return
-
-            # 初回数値受信
-            if manager.last_number is None:
-                if val < manager.undone:
-                    manager.last_number = val
-                    await manager.update_and_broadcast("DIGEST", total=manager.total + 1, undone=max(0, manager.undone - 1))
-                return
-
-            # 2回目以降の差分計算
-            if val < manager.last_number:
-                diff = manager.last_number - val
-                manager.last_number = val
-
-                await manager.update_and_broadcast("DIGEST_MULTI",
-                                                   total=manager.total + diff,
-                                                   undone=max(0, manager.undone - diff),
-                                                   diff=diff)
-
-                # モード終了判定
-                if val == 0:
-                    manager.is_voice_mode = False
-                    manager.last_number = None
-                    await manager.broadcast({"type": "MODE_CHANGE", "value": "normal"})
 
     if is_continue and load_user_comment_on_stream():
         print("挨拶キャッシュを復元しました。")
