@@ -46,36 +46,34 @@ app = FastAPI()
 class ConnectionManager:
     def __init__(self):
         self.active_connections: list[WebSocket] = []
-        # サーバー側で数値を管理（初期値）
         self.total = 0
         self.undone = 0
         self.is_voice_mode = False
         self.last_number = None
 
-    async def connect(self, websocket: WebSocket):
-        await websocket.accept()
-        self.active_connections.append(websocket)
+    # --- 改善ポイント: 数値更新と通知をセットで行うメソッド ---
+    async def update_and_broadcast(self, msg_type: str, total: int = None, undone: int = None, diff: int = 0):
+        """数値を更新し、全クライアントへ通知する"""
+        if total is not None:
+            self.total = total
+        if undone is not None:
+            self.undone = undone
 
-        # 接続した瞬間に、現在の最新状態をそのクライアントだけに送る
-        await websocket.send_json({
-            "type": "SYNC_STATE",
-            "total": self.total,
-            "undone": self.undone,
-        })
+        payload = {"type": msg_type, "total": self.total, "undone": self.undone}
+        if diff > 0:
+            payload["diff"] = diff
+        elif msg_type in ["UPDATE_TOTAL", "UPDATE_UNDONE", "ADD_UNDONE"]:
+            # 個別更新の場合は value キーで送る既存の React 仕様に合わせる
+            payload["value"] = total if "TOTAL" in msg_type else undone
+
+        await self.broadcast(payload)
 
     def disconnect(self, websocket: WebSocket):
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
 
     async def broadcast(self, message: dict):
-        # ブロードキャストされる内容に基づいて、サーバー側の数値も更新しておく
-        if message["type"] == "ADD_UNDONE":
-            self.undone += message["value"]
-        elif message["type"] == "UPDATE_TOTAL":
-            self.total = message["value"]
-        elif message["type"] == "UPDATE_UNDONE":
-            self.undone = message["value"]
-
+        # 配信中に接続が切れたクライアントを掃除しながら送信
         for connection in self.active_connections[:]:
             try:
                 await connection.send_json(message)
@@ -240,67 +238,40 @@ async def main():
             if not text:
                 return
 
-            # --- 1. モード開始判定 (正規表現) ---
-            # 「筋トレ」を含み、かつカッコ内のいずれかを含む
+            # 1. モード開始判定
             if re.search(r'筋トレ.*(消化|始め|開始|します|やります)', text):
                 manager.is_voice_mode = True
                 manager.last_number = None
-                print(">>> 音声認識消化モード：開始（自動検知）")
+                await manager.broadcast({"type": "MODE_CHANGE", "value": "voice"})
+                return # 開始した回は数値処理をスキップ（誤作動防止）
 
-                # UI側の表示を「音声認識消化」に同期させるための通知
-                await manager.broadcast({
-                    "type": "MODE_CHANGE",
-                    "value": "voice"
-                })
-
-            # --- 2. 数値の解析 ---
+            # 2. 数値解析と音声モード処理
             val = kanji_to_int(text)
+            if val is None or not manager.is_voice_mode:
+                return
 
-            if val is not None and manager.is_voice_mode:
-                # 初回数値受信
-                if manager.last_number is None:
-                    if val < manager.undone:
-                        manager.undone = max(0, manager.undone - 1)
-                        manager.total += 1
-                        manager.last_number = val
-
-                        print(f"カウントダウン開始（基準: {val} / 初回分を消化）")
-
-                        # 初回分のアニメーションを飛ばすために通知
-                        await manager.broadcast({
-                            "type": "DIGEST",
-                            "total": manager.total,
-                            "undone": manager.undone
-                        })
-
-                # 2回目以降の差分計算
-                elif val < manager.last_number:
-                    diff = manager.last_number - val
-                    manager.undone = max(0, manager.undone - diff)
-                    manager.total += diff
+            # 初回数値受信
+            if manager.last_number is None:
+                if val < manager.undone:
                     manager.last_number = val
+                    await manager.update_and_broadcast("DIGEST", total=manager.total + 1, undone=max(0, manager.undone - 1))
+                return
 
-                    print(f"音声消化反映: -{diff} (現在値: {val})")
+            # 2回目以降の差分計算
+            if val < manager.last_number:
+                diff = manager.last_number - val
+                manager.last_number = val
 
-                    # 複数回分（数値が飛んだ場合など）に対応した通知
-                    await manager.broadcast({
-                        "type": "DIGEST_MULTI",
-                        "total": manager.total,
-                        "undone": manager.undone,
-                        "diff": diff
-                    })
+                await manager.update_and_broadcast("DIGEST_MULTI",
+                                                   total=manager.total + diff,
+                                                   undone=max(0, manager.undone - diff),
+                                                   diff=diff)
 
-                    # --- モード終了判定と通知 ---
-                    if val == 0:
-                        manager.is_voice_mode = False
-                        manager.last_number = None
-                        print(">>> 音声認識消化モード：完了（自動終了）")
-
-                        # フロントエンドのラジオボタンを「通常」に戻すための通知
-                        await manager.broadcast({
-                            "type": "MODE_CHANGE",
-                            "value": "normal"
-                        })
+                # モード終了判定
+                if val == 0:
+                    manager.is_voice_mode = False
+                    manager.last_number = None
+                    await manager.broadcast({"type": "MODE_CHANGE", "value": "normal"})
 
     if is_continue and load_user_comment_on_stream():
         print("挨拶キャッシュを復元しました。")
