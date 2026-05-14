@@ -1,3 +1,4 @@
+import json
 import unittest
 from unittest.mock import AsyncMock
 
@@ -12,6 +13,126 @@ class TestWorkoutLogic(unittest.IsolatedAsyncioTestCase):
         self.manager.undone = 50
         self.manager.total = 100
         main.manager = self.manager
+
+    async def test_add_undone_is_first(self):
+        """初見コメントで未消化が送信されるかテスト"""
+        waudc = main.g.config["welcomeAddUndoneCount"]
+        waudc["enable"] = True
+        waudc["first"] = 2
+        waudc["normal"] = 1
+
+        # 初回(さらに初見)
+        data = {
+            "id": "twitch_chat_bot",
+            "request": {
+                "id": "a",
+                "content": "1",
+                "isFirst": True,
+            }
+        }
+        await main.recv_fuyuka_response(json.dumps(data))
+        self.manager.broadcast.assert_any_call({
+            "type": "ADD_UNDONE",
+            "value": 2,
+        })
+
+        # 2回目
+        self.manager.broadcast.reset_mock()
+        data["request"]["isFirst"] = False
+        await main.recv_fuyuka_response(json.dumps(data))
+        self.manager.broadcast.assert_not_called()
+
+    async def test_add_undone_is_not_first(self):
+        """コメントで未消化が送信されるかテスト"""
+        waudc = main.g.config["welcomeAddUndoneCount"]
+        waudc["enable"] = True
+        waudc["first"] = 2
+        waudc["normal"] = 1
+
+        # 初回(常連)
+        data = {
+            "id": "twitch_chat_bot",
+            "request": {
+                "id": "a",
+                "content": "1",
+                "isFirst": False,
+            }
+        }
+        await main.recv_fuyuka_response(json.dumps(data))
+        self.manager.broadcast.assert_any_call({
+            "type": "ADD_UNDONE",
+            "value": 1,
+        })
+
+        # 2回目
+        self.manager.broadcast.reset_mock()
+        await main.recv_fuyuka_response(json.dumps(data))
+        self.manager.broadcast.assert_not_called()
+
+    async def test_add_undone_showroom_is_first(self):
+        """SHOWROOMの初見コメントで未消化が送信されるかテスト"""
+        waudc = main.g.config["welcomeAddUndoneCount"]
+        waudc["enable"] = True
+        waudc["first"] = 2
+        waudc["normal"] = 1
+
+        # 初回(さらに初見)
+        data = {
+            "id": "showroom_chat_bot",
+            "request": {
+                "id": "a",
+                "content": "1",
+                "isFirst": True,
+            }
+        }
+        await main.recv_fuyuka_response(json.dumps(data))
+        self.manager.broadcast.assert_not_called()
+
+        # 2回目
+        self.manager.broadcast.reset_mock()
+        data["request"]["isFirst"] = False
+        await main.recv_fuyuka_response(json.dumps(data))
+        self.manager.broadcast.assert_any_call({
+            "type": "ADD_UNDONE",
+            "value": 2,
+        })
+
+        # 3回目
+        self.manager.broadcast.reset_mock()
+        await main.recv_fuyuka_response(json.dumps(data))
+        self.manager.broadcast.assert_not_called()
+
+    async def test_add_undone_showroom_is_not_first(self):
+        """SHOWROOMのコメントで未消化が送信されるかテスト"""
+        waudc = main.g.config["welcomeAddUndoneCount"]
+        waudc["enable"] = True
+        waudc["first"] = 2
+        waudc["normal"] = 1
+
+        # 初回(常連)
+        data = {
+            "id": "showroom_chat_bot",
+            "request": {
+                "id": "a",
+                "content": "1",
+                "isFirst": False,
+            }
+        }
+        await main.recv_fuyuka_response(json.dumps(data))
+        self.manager.broadcast.assert_not_called()
+
+        # 2回目
+        self.manager.broadcast.reset_mock()
+        await main.recv_fuyuka_response(json.dumps(data))
+        self.manager.broadcast.assert_any_call({
+            "type": "ADD_UNDONE",
+            "value": 1,
+        })
+
+        # 3回目
+        self.manager.broadcast.reset_mock()
+        await main.recv_fuyuka_response(json.dumps(data))
+        self.manager.broadcast.assert_not_called()
 
     async def test_mode_start(self):
         """「筋トレ開始」でモードが切り替わるかテスト"""
