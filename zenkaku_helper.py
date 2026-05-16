@@ -19,6 +19,7 @@ def kanji_to_int(text):
     replacement_table = {
         "ゼロ": "0",
         "零": "0",
+        "ゴー": "5",
         "中": "十",
     }
     for key, value in replacement_table.items():
