@@ -265,8 +265,7 @@ async def recv_talk_text(message: str) -> None:
             return
 
         # --- 「筋トレ [数値]回 追加」の判定 ---
-        # ^筋トレ で始まり、途中のスペースを許容しながら数値と「追加」を検出します
-        add_match = re.search(r"^筋トレ.*?\s*(\d+)\s*回.*\s*追加\s*(しま|で).?す", text)
+        add_match = re.search(r"筋トレ.*?\s*(\d+)回.*追加.*(しま|で)", text)
 
         if add_match:
             # 正規表現の最初のカッコ ( ) にマッチした数値を取得して整数に変換

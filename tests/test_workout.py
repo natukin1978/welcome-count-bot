@@ -147,7 +147,7 @@ class TestWorkoutLogic(unittest.IsolatedAsyncioTestCase):
 
         # 2. 音声で「筋トレ 15回 追加」と発話
         # undoneは 9 + 15 = 24 に増えるが、音声の基準値(last_number)は9のまま動かない
-        await main.recv_talk_text("筋トレを15回分追加しまーす。")
+        await main.recv_talk_text("じゃあ筋トレを15回分追加しまーす。")
         self.assertEqual(self.manager.undone, 24)
         self.assertEqual(self.manager.last_number, 9)
         self.assertEqual(self.manager.total, 101)
