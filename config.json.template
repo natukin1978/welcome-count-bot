@@ -1,8 +1,15 @@
 {
   "logLevel": "WARNING",
+  "workoutApi": {
+    "port": 38696
+  },
   "fuyukaApi": {
     "enable": false,
     "baseUrl": "ws://127.0.0.1:38321"
+  },
+  "neoInnerApi": {
+    "enable": false,
+    "baseUrl": "ws://127.0.0.1:30000"
   },
   "welcomeAddUndoneCount": {
     "enable": false,
