@@ -283,8 +283,8 @@ async def recv_talk_text(message: str) -> None:
                 await manager.update_and_broadcast("DIGEST", total=manager.total + 1, undone=max(0, manager.undone - 1))
             return
 
-        # 2回目以降の差分計算
-        if val < manager.last_number:
+        # 2回目以降の差分計算(ただし誤差は3カウント以内)
+        if manager.last_number - 3 <= val < manager.last_number:
             diff = manager.last_number - val
             manager.last_number = val
 

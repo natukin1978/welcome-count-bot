@@ -154,40 +154,58 @@ class TestWorkoutLogic(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.manager.last_number, 49)
 
         # 3. 2回目の数値（カウントダウン）
-        # 「45」と言った場合、さらに4つ消化されるはず
-        await main.recv_talk_text("45")
-        self.assertEqual(self.manager.undone, 45)
-        self.assertEqual(self.manager.total, 105)
+        # 「46」と言った場合、さらに3つ消化されるはず
+        await main.recv_talk_text("46")
+        self.assertEqual(self.manager.undone, 46)
+        self.assertEqual(self.manager.total, 104)
 
     async def test_undone_increase_after_last_number_set(self):
-        """基準値決定(初回の1回消化)後にundoneを10加算した場合の計算テスト"""
+        """基準値決定後にundoneを10加算し、3以内のカウントダウンが継続できるかテスト"""
         # 1. 音声モード開始と初期状態の設定
         await main.recv_talk_text("筋トレ開始")
         self.manager.undone = 40
         self.manager.total = 100
 
-        # 2. 初回の数値「39」を受信
-        # 40 -> 39 への変化（1回消化）が発生し、基準値(last_number)が39になる
+        # 2. 初回の数値「39」を受信（1回消化、基準値が39になる）
         await main.recv_talk_text("39")
         self.assertEqual(self.manager.undone, 39)
         self.assertEqual(self.manager.total, 101)
         self.assertEqual(self.manager.last_number, 39)
 
-        # 3. 外部要因（UIの追加ボタンなど）で undone を 10 加算
-        # 39 + 10 = 49 になる
+        # 3. 外部要因で undone を 10 加算（39 + 10 = 49 になる）
         self.manager.undone += 10
         self.assertEqual(self.manager.undone, 49)
 
-        # 4. 次の数値「35」を受信
+        # 4. 次の数値「36」を受信（39 - 36 = 3 なので、3以内セーフティを通過）
         # 期待される計算:
-        # 差分: 基準値(39) - 今回の値(35) = 4 消化
-        # undone: 49(加算後) - 4 = 45
-        # total: 101(前回) + 4 = 105
+        # 差分: 基準値(39) - 今回の値(36) = 3 消化
+        # undone: 49(加算後) - 3 = 46
+        # total: 101(前回) + 3 = 104
+        await main.recv_talk_text("36")
+
+        self.assertEqual(self.manager.undone, 46)
+        self.assertEqual(self.manager.total, 104)
+        self.assertEqual(self.manager.last_number, 36)
+
+    async def test_far_number_is_ignored_after_undone_increase(self):
+        """undone加算後であっても、3より大きく離れた数値が正しく無視されるかテスト"""
+        # 1. 初期状態を設定（基準値を39にする）
+        await main.recv_talk_text("筋トレ開始")
+        self.manager.undone = 40
+        await main.recv_talk_text("39")
+
+        # 2. 外部要因で undone を 10 加算（39 + 10 = 49 になる）
+        self.manager.undone += 10
+
+        # 3. 3より大きく離れた数値「35」を受信（39 - 35 = 4 でアウト）
+        # 期待される挙動:
+        # 安全機能が働き、処理がスキップされる。
+        # undone(49), total(101), last_number(39) のすべてが変化しないこと。
         await main.recv_talk_text("35")
 
-        self.assertEqual(self.manager.undone, 45)
-        self.assertEqual(self.manager.total, 105)
-        self.assertEqual(self.manager.last_number, 35)
+        self.assertEqual(self.manager.undone, 49)       # 49のまま（消化されない）
+        self.assertEqual(self.manager.total, 101)      # 101のまま
+        self.assertEqual(self.manager.last_number, 39)  # 基準値も39のまま
 
     async def test_mode_end_at_zero(self):
         """「0」でモードが終了するかテスト"""
