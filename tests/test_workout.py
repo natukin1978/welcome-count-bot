@@ -159,6 +159,18 @@ class TestWorkoutLogic(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.manager.undone, 22)
         self.assertEqual(self.manager.last_number, 7)
 
+    async def test_voice_add_undone_kanji(self):
+        """音声による筋トレ回数追加で、漢数字が正しく処理されるかテスト"""
+        self.manager.undone = 14
+
+        # 1. 漢数字「十回」での追加をテスト (14 + 10 = 24)
+        await main.recv_talk_text("筋トレ十回追加します。")
+        self.assertEqual(self.manager.undone, 24)
+
+        # 2. 漢数字「十五回」での追加をテスト (24 + 15 = 39)
+        await main.recv_talk_text("じゃあ筋トレを十五回分追加でーす")
+        self.assertEqual(self.manager.undone, 39)
+
     async def test_mode_start(self):
         """「筋トレ開始」でモードが切り替わるかテスト"""
         await main.recv_talk_text("筋トレ始めます")

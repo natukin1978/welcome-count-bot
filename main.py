@@ -265,11 +265,11 @@ async def recv_talk_text(message: str) -> None:
             return
 
         # --- 「筋トレ [数値]回 追加」の判定 ---
-        add_match = re.search(r"筋トレ.*?\s*(\d+)回.*追加.*(しま|で)", text)
+        add_match = re.search(r"筋トレ.*?\s*(\d+|[一二三四五六七八九十百]+)回.*追加.*(しま|で)", text)
 
         if add_match:
             # 正規表現の最初のカッコ ( ) にマッチした数値を取得して整数に変換
-            additional_count = int(add_match.group(1))
+            additional_count = kanji_to_int(add_match.group(1))
 
             if additional_count > 0:
                 # 画面への通知と状態の保存を実行
