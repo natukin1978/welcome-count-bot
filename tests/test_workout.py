@@ -134,6 +134,25 @@ class TestWorkoutLogic(unittest.IsolatedAsyncioTestCase):
         await main.recv_fuyuka_response(json.dumps(data))
         self.manager.broadcast.assert_not_called()
 
+    async def test_voice_start_with_count(self):
+        """音声による回数指定付きの筋トレ開始コマンドをテスト"""
+        self.manager.undone = 0
+        self.manager.total = 100
+        self.manager.last_number = None
+
+        # 1. 「今から筋トレ 十回 やります。」と発話して開始
+        # 期待される状態: undoneが10、last_numberが10になる
+        await main.recv_talk_text("今から筋トレ 十回 やります。")
+        self.assertEqual(self.manager.undone, 10)
+        self.assertEqual(self.manager.last_number, 10)
+
+        # 2. 続けて「9」と発話して1回消化できるか検証（3以内制限のクリアを確認）
+        # 期待される状態: undoneが9、last_numberが9になる
+        await main.recv_talk_text("9")
+        self.assertEqual(self.manager.undone, 9)
+        self.assertEqual(self.manager.last_number, 9)
+        self.assertEqual(self.manager.total, 101)
+
     async def test_voice_add_undone(self):
         """音声による筋トレ回数の追加リクエストをテスト（last_numberは維持）"""
         await main.recv_talk_text("筋トレ開始")

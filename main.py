@@ -279,6 +279,35 @@ async def recv_talk_text(message: str) -> None:
                 )
                 return
 
+        # --- 「筋トレ [数値]回 やります/します/やるよ」の同時開始判定 ---
+        # 冒頭に言葉があってもマッチし、回数指定と開始の意思を同時に受け取ります
+        start_with_count_match = re.search(r"筋トレ.*?\s*(\d+|[一二三四五六七八九十百]+)回.*(やり|しま|やる)", text)
+
+        if start_with_count_match:
+            matched_text = start_with_count_match.group(1)
+
+            # 数値への変換処理
+            initial_count = kanji_to_int(matched_text)
+
+            if initial_count > 0:
+                # 筋トレモードの初期化と同時に、発話された数値をセット
+                manager.is_voice_mode = True
+                manager.undone = initial_count
+                manager.last_number = initial_count
+                # totalの初期値（必要に応じて既存の値を引き継ぐか、0リセットするか調整してください）
+                # ここでは現在のトータル値を維持、または初期状態と仮定します
+
+                # 画面（UI）へ筋トレ開始と初期数値を通知
+                # （※フロント側が受け取るイベント名は、既存の開始イベントや新規イベントに合わせて調整してください）
+                await manager.update_and_broadcast(
+                    "START_WITH_COUNT",
+                    total=manager.total,
+                    undone=manager.undone,
+                    diff=0
+                )
+                print(f"音声報告: 筋トレを {initial_count} 回で開始しました。（基準値: {manager.last_number}）")
+                return
+
         # 1. モード開始判定
         if re.search(r'筋トレ.*(消化|始め|開始|します|やります)', text):
             manager.is_voice_mode = True
@@ -295,7 +324,9 @@ async def recv_talk_text(message: str) -> None:
         if manager.last_number is None:
             if val < manager.undone:
                 manager.last_number = val
-                await manager.update_and_broadcast("DIGEST", total=manager.total + 1, undone=max(0, manager.undone - 1))
+                await manager.update_and_broadcast("DIGEST",
+                                                   total=manager.total + 1,
+                                                   undone=max(0, manager.undone - 1))
             return
 
         # 2回目以降の差分計算(ただし誤差は3カウント以内)
