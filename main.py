@@ -249,6 +249,92 @@ async def recv_fuyuka_response(message: str) -> None:
     except json.JSONDecodeError:
         pass
 
+
+# =====================================================================
+# リファクタリングによって抽出された各コマンド処理のヘルパー関数群
+# =====================================================================
+
+async def _handle_workout_add_command(text: str) -> bool:
+    """「筋トレ [数値]回 追加」の判定と処理"""
+    add_match = re.search(r"筋トレ.*?\s*(\d+|[一二三四五六七八九十百]+)回.*追加.*(しま|で)", text)
+    if add_match:
+        additional_count = kanji_to_int(add_match.group(1))
+        if additional_count > 0:
+            await manager.update_and_broadcast("ADD_UNDONE", value=additional_count)
+            return True
+    return False
+
+
+async def _handle_workout_start_with_count_command(text: str) -> bool:
+    """「筋トレ [数値]回 やります/します/やるよ」の同時開始判定と処理"""
+    start_with_count_match = re.search(r"筋トレ.*?\s*(\d+|[一二三四五六七八九十百]+)回.*(やり|しま|やる)", text)
+    if start_with_count_match:
+        matched_text = start_with_count_match.group(1)
+        initial_count = kanji_to_int(matched_text)
+        if initial_count > 0:
+            manager.is_voice_mode = True
+            manager.undone = initial_count
+            manager.last_number = initial_count
+            await manager.update_and_broadcast(
+                "START_WITH_COUNT",
+                total=manager.total,
+                undone=manager.undone,
+                diff=0
+            )
+            print(f"音声報告: 筋トレを {initial_count} 回で開始しました。（基準値: {manager.last_number}）")
+            return True
+    return False
+
+
+async def _handle_workout_mode_start_command(text: str) -> bool:
+    """「筋トレ開始」などのモード開始判定と処理"""
+    if re.search(r'筋トレ.*(消化|始め|開始|します|やります)', text):
+        manager.is_voice_mode = True
+        manager.last_number = None
+        await manager.broadcast({"type": "MODE_CHANGE", "value": "voice"})
+        return True
+    return False
+
+
+async def _handle_workout_countdown_process(text: str) -> bool:
+    """数値解析と音声モードによるカウントダウン処理"""
+    val = kanji_to_int(text)
+    if val is None or not manager.is_voice_mode:
+        return False
+
+    # 初回数値受信時の処理
+    if manager.last_number is None:
+        if val < manager.undone:
+            manager.last_number = val
+            await manager.update_and_broadcast("DIGEST",
+                                               total=manager.total + 1,
+                                               undone=max(0, manager.undone - 1))
+        return True
+
+    # 2回目以降の差分計算処理 (誤差は3カウント以内制限)
+    if manager.last_number - 3 <= val < manager.last_number:
+        diff = manager.last_number - val
+        manager.last_number = val
+
+        await manager.update_and_broadcast("DIGEST_MULTI",
+                                           total=manager.total + diff,
+                                           undone=max(0, manager.undone - diff),
+                                           diff=diff)
+
+        # モード終了判定（0になったら通常モードへ）
+        if val == 0:
+            manager.is_voice_mode = False
+            manager.last_number = None
+            await manager.broadcast({"type": "MODE_CHANGE", "value": "normal"})
+        return True
+
+    return False
+
+
+# =====================================================================
+# メインの音声テキスト受信ハンドラー（スリム化完了）
+# =====================================================================
+
 async def recv_talk_text(message: str) -> None:
     try:
         data = json.loads(message)
@@ -264,86 +350,21 @@ async def recv_talk_text(message: str) -> None:
         if not text:
             return
 
-        # --- 「筋トレ [数値]回 追加」の判定 ---
-        add_match = re.search(r"筋トレ.*?\s*(\d+|[一二三四五六七八九十百]+)回.*追加.*(しま|で)", text)
-
-        if add_match:
-            # 正規表現の最初のカッコ ( ) にマッチした数値を取得して整数に変換
-            additional_count = kanji_to_int(add_match.group(1))
-
-            if additional_count > 0:
-                # 画面への通知と状態の保存を実行
-                await manager.update_and_broadcast(
-                    "ADD_UNDONE",
-                    value=additional_count
-                )
-                return
-
-        # --- 「筋トレ [数値]回 やります/します/やるよ」の同時開始判定 ---
-        # 冒頭に言葉があってもマッチし、回数指定と開始の意思を同時に受け取ります
-        start_with_count_match = re.search(r"筋トレ.*?\s*(\d+|[一二三四五六七八九十百]+)回.*(やり|しま|やる)", text)
-
-        if start_with_count_match:
-            matched_text = start_with_count_match.group(1)
-
-            # 数値への変換処理
-            initial_count = kanji_to_int(matched_text)
-
-            if initial_count > 0:
-                # 筋トレモードの初期化と同時に、発話された数値をセット
-                manager.is_voice_mode = True
-                manager.undone = initial_count
-                manager.last_number = initial_count
-                # totalの初期値（必要に応じて既存の値を引き継ぐか、0リセットするか調整してください）
-                # ここでは現在のトータル値を維持、または初期状態と仮定します
-
-                # 画面（UI）へ筋トレ開始と初期数値を通知
-                # （※フロント側が受け取るイベント名は、既存の開始イベントや新規イベントに合わせて調整してください）
-                await manager.update_and_broadcast(
-                    "START_WITH_COUNT",
-                    total=manager.total,
-                    undone=manager.undone,
-                    diff=0
-                )
-                print(f"音声報告: 筋トレを {initial_count} 回で開始しました。（基準値: {manager.last_number}）")
-                return
-
-        # 1. モード開始判定
-        if re.search(r'筋トレ.*(消化|始め|開始|します|やります)', text):
-            manager.is_voice_mode = True
-            manager.last_number = None
-            await manager.broadcast({"type": "MODE_CHANGE", "value": "voice"})
-            return # 開始した回は数値処理をスキップ（誤作動防止）
-
-        # 2. 数値解析と音声モード処理
-        val = kanji_to_int(text)
-        if val is None or not manager.is_voice_mode:
+        # 1. 筋トレ回数追加コマンドの判定
+        if await _handle_workout_add_command(text):
             return
 
-        # 初回数値受信
-        if manager.last_number is None:
-            if val < manager.undone:
-                manager.last_number = val
-                await manager.update_and_broadcast("DIGEST",
-                                                   total=manager.total + 1,
-                                                   undone=max(0, manager.undone - 1))
+        # 2. 回数指定付き筋トレ同時開始コマンドの判定
+        if await _handle_workout_start_with_count_command(text):
             return
 
-        # 2回目以降の差分計算(ただし誤差は3カウント以内)
-        if manager.last_number - 3 <= val < manager.last_number:
-            diff = manager.last_number - val
-            manager.last_number = val
+        # 3. 通常の筋トレモード開始コマンドの判定
+        if await _handle_workout_mode_start_command(text):
+            return
 
-            await manager.update_and_broadcast("DIGEST_MULTI",
-                                               total=manager.total + diff,
-                                               undone=max(0, manager.undone - diff),
-                                               diff=diff)
+        # 4. 数値発話によるカウントダウン消化処理
+        await _handle_workout_countdown_process(text)
 
-            # モード終了判定
-            if val == 0:
-                manager.is_voice_mode = False
-                manager.last_number = None
-                await manager.broadcast({"type": "MODE_CHANGE", "value": "normal"})
 
 async def main():
     def get_workoutApi_port() -> int:
