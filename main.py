@@ -251,7 +251,7 @@ async def recv_fuyuka_response(message: str) -> None:
 
 
 # =====================================================================
-# リファクタリングによって抽出された各コマンド処理のヘルパー関数群
+# 各コマンド処理のヘルパー関数群
 # =====================================================================
 
 async def _handle_workout_add_command(text: str) -> bool:
@@ -272,14 +272,14 @@ async def _handle_workout_start_with_count_command(text: str) -> bool:
         matched_text = start_with_count_match.group(1)
         initial_count = kanji_to_int(matched_text)
         if initial_count > 0:
+            # 状態変数の設定（開始時点ではまだ実施していないため、数値をそのままキープする）
             manager.is_voice_mode = True
-            manager.undone = initial_count
             manager.last_number = initial_count
+
+            await manager.broadcast({"type": "MODE_CHANGE", "value": "voice"})
             await manager.update_and_broadcast(
-                "START_WITH_COUNT",
-                total=manager.total,
-                undone=manager.undone,
-                diff=0
+                "UPDATE_UNDONE",
+                value=initial_count,
             )
             print(f"音声報告: 筋トレを {initial_count} 回で開始しました。（基準値: {manager.last_number}）")
             return True
@@ -321,7 +321,7 @@ async def _handle_workout_countdown_process(text: str) -> bool:
                                            undone=max(0, manager.undone - diff),
                                            diff=diff)
 
-        # モード終了判定（0になったら通常モードへ）
+        # モード終了判定
         if val == 0:
             manager.is_voice_mode = False
             manager.last_number = None
@@ -332,7 +332,7 @@ async def _handle_workout_countdown_process(text: str) -> bool:
 
 
 # =====================================================================
-# メインの音声テキスト受信ハンドラー（スリム化完了）
+# メインの音声テキスト受信ハンドラー
 # =====================================================================
 
 async def recv_talk_text(message: str) -> None:
