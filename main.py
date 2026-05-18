@@ -271,17 +271,21 @@ async def _handle_workout_start_with_count_command(text: str) -> bool:
     if start_with_count_match:
         matched_text = start_with_count_match.group(1)
         initial_count = kanji_to_int(matched_text)
+
         if initial_count > 0:
-            # 状態変数の設定（開始時点ではまだ実施していないため、数値をそのままキープする）
+            # 【重要】未消化の数が、発話された回数以上ある場合のみ有効とする
+            if manager.undone < initial_count:
+                print(f"音声報告スキップ: 現在の未消化数({manager.undone})が指定回数({initial_count})未満です。")
+                return False
+
+            # 状態変数の設定（未消化数 undone は変更せず、比較用の基準値だけを固定する）
             manager.is_voice_mode = True
             manager.last_number = initial_count
 
+            # 既存のモード変更通知のみを送信（フロントエンドの表示を音声モードに切り替えさせる）
             await manager.broadcast({"type": "MODE_CHANGE", "value": "voice"})
-            await manager.update_and_broadcast(
-                "UPDATE_UNDONE",
-                value=initial_count,
-            )
-            print(f"音声報告: 筋トレを {initial_count} 回で開始しました。（基準値: {manager.last_number}）")
+
+            print(f"音声報告: 筋トレを {initial_count} 回で開始しました。（基準値: {manager.last_number}、未消化数: {manager.undone}）")
             return True
     return False
 

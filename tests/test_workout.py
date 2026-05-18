@@ -136,18 +136,21 @@ class TestWorkoutLogic(unittest.IsolatedAsyncioTestCase):
 
     async def test_voice_start_with_count(self):
         """音声による回数指定付きの筋トレ開始コマンドをテスト"""
-        self.manager.undone = 0
+        # 前提条件を満たすため、未消化数を10以上に設定します
+        self.manager.undone = 10
         self.manager.total = 100
         self.manager.last_number = None
 
         # 1. 「今から筋トレ 十回 やります。」と発話して開始
-        # 期待される状態: undoneが10、last_numberが10になる
+        # 期待される状態: 未消化数が10以上あるので有効。undoneは10のまま「変化なし」、last_numberが10に固定される
         await main.recv_talk_text("今から筋トレ 十回 やります。")
         self.assertEqual(self.manager.undone, 10)
         self.assertEqual(self.manager.last_number, 10)
+        self.assertEqual(self.manager.total, 100)
 
-        # 2. 続けて「9」と発話して1回消化できるか検証（3以内制限のクリアを確認）
-        # 期待される状態: undoneが9、last_numberが9になる
+        # 2. 続けて「9」と発話して1回消化できるか検証
+        # 期待される状態: 基準値10から9への減少（差分1）により、1回消化される
+        # undoneは 10 から 1 減って 9 になり、total は 101 に増える
         await main.recv_talk_text("9")
         self.assertEqual(self.manager.undone, 9)
         self.assertEqual(self.manager.last_number, 9)
