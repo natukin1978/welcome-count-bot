@@ -257,85 +257,99 @@ async def recv_fuyuka_response(message: str) -> None:
 async def _handle_workout_add_command(text: str) -> bool:
     """「筋トレ [数値]回 追加」の判定と処理"""
     add_match = re.search(r"筋トレ.*?\s*(\d+|[一二三四五六七八九十百]+)回.*追加.*(しま|で)", text)
-    if add_match:
-        additional_count = kanji_to_int(add_match.group(1))
-        if additional_count > 0:
-            await manager.update_and_broadcast("ADD_UNDONE", value=additional_count)
-            logger.info(f"音声報告: 筋トレを {additional_count} 回追加しました。")
-            return True
-    return False
+    if not add_match:
+        return False
+
+    additional_count = kanji_to_int(add_match.group(1))
+    if additional_count <= 0:
+        return False
+
+    await manager.update_and_broadcast("ADD_UNDONE", value=additional_count)
+    logger.info(f"音声報告: 筋トレを {additional_count} 回追加しました。")
+    return True
 
 
 async def _handle_workout_start_with_count_command(text: str) -> bool:
     """「筋トレ [数値]回 やります/します/やるよ」の同時開始判定と処理"""
     start_with_count_match = re.search(r"筋トレ.*?\s*(\d+|[一二三四五六七八九十百]+)回.*(やり|しま|やる)", text)
-    if start_with_count_match:
-        matched_text = start_with_count_match.group(1)
-        initial_count = kanji_to_int(matched_text)
+    if not start_with_count_match:
+        return False
 
-        if initial_count > 0:
-            # 【重要】未消化の数が、発話された回数以上ある場合のみ有効とする
-            if manager.undone < initial_count:
-                logger.info(f"音声報告スキップ: 現在の未消化数({manager.undone})が指定回数({initial_count})未満です。")
-                return False
+    matched_text = start_with_count_match.group(1)
+    initial_count = kanji_to_int(matched_text)
 
-            # 状態変数の設定（未消化数 undone は変更せず、比較用の基準値だけを固定する）
-            manager.is_voice_mode = True
-            manager.last_number = initial_count
+    if initial_count <= 0:
+        return False
 
-            # 既存のモード変更通知のみを送信（フロントエンドの表示を音声モードに切り替えさせる）
-            await manager.broadcast({"type": "MODE_CHANGE", "value": "voice"})
-            logger.info(f"音声報告: 筋トレを {initial_count} 回で開始しました。（基準値: {manager.last_number}、未消化数: {manager.undone}）")
-            return True
-    return False
+    # 未消化の数が、発話された回数未満なら即終了
+    if manager.undone < initial_count:
+        logger.info(f"音声報告スキップ: 現在の未消化数({manager.undone})が指定回数({initial_count})未満です。")
+        return False
+
+    manager.is_voice_mode = True
+    manager.last_number = initial_count
+
+    await manager.broadcast({"type": "MODE_CHANGE", "value": "voice"})
+    logger.info(f"音声報告: 筋トレを {initial_count} 回で開始しました。（基準値: {manager.last_number}、未消化数: {manager.undone}）")
+    return True
 
 
 async def _handle_workout_mode_start_command(text: str) -> bool:
     """「筋トレ開始」などのモード開始判定と処理"""
-    if re.search(r'筋トレ.*(消化|始め|開始|します|やります)', text):
-        manager.is_voice_mode = True
-        manager.last_number = None
-        await manager.broadcast({"type": "MODE_CHANGE", "value": "voice"})
-        logger.info(f"音声報告: 筋トレを開始します。")
-        return True
-    return False
+    if not re.search(r'筋トレ.*(消化|始め|開始|します|やります)', text):
+        return False
+
+    manager.is_voice_mode = True
+    manager.last_number = None
+    await manager.broadcast({"type": "MODE_CHANGE", "value": "voice"})
+    logger.info(f"音声報告: 筋トレを開始します。")
+    return True
 
 
 async def _handle_workout_countdown_process(text: str) -> bool:
     """数値解析と音声モードによるカウントダウン処理"""
+    if not manager.is_voice_mode:
+        return False
+
     val = kanji_to_int(text)
-    if val is None or not manager.is_voice_mode:
+    if val is None:
         return False
 
     # 初回数値受信時の処理
     if manager.last_number is None:
+        # 現在の未消化数より小さい値が来たら基準値として確定し、1回消化する
         if val < manager.undone:
             manager.last_number = val
-            await manager.update_and_broadcast("DIGEST",
-                                               total=manager.total + 1,
-                                               undone=max(0, manager.undone - 1))
+            await manager.update_and_broadcast(
+                "DIGEST",
+                total=manager.total + 1,
+                undone=max(0, manager.undone - 1)
+            )
             logger.info(f"音声報告: 筋トレを開始しました。（基準値: {manager.last_number}、未消化数: {manager.undone}）")
-        return True
+            return True
+        return False
 
     # 2回目以降の差分計算処理 (誤差は3カウント以内制限)
-    if manager.last_number - 3 <= val < manager.last_number:
-        diff = manager.last_number - val
-        manager.last_number = val
+    if not (manager.last_number - 3 <= val < manager.last_number):
+        return False
 
-        await manager.update_and_broadcast("DIGEST_MULTI",
-                                           total=manager.total + diff,
-                                           undone=max(0, manager.undone - diff),
-                                           diff=diff)
+    diff = manager.last_number - val
+    manager.last_number = val
 
-        # モード終了判定
-        if val == 0:
-            manager.is_voice_mode = False
-            manager.last_number = None
-            await manager.broadcast({"type": "MODE_CHANGE", "value": "normal"})
-            logger.info(f"音声報告: 筋トレを終了しました。")
-        return True
+    await manager.update_and_broadcast(
+        "DIGEST_MULTI",
+        total=manager.total + diff,
+        undone=max(0, manager.undone - diff),
+        diff=diff
+    )
 
-    return False
+    # モード終了判定
+    if val == 0:
+        manager.is_voice_mode = False
+        manager.last_number = None
+        await manager.broadcast({"type": "MODE_CHANGE", "value": "normal"})
+        logger.info(f"音声報告: 筋トレを終了しました。")
+    return True
 
 
 # =====================================================================
