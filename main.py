@@ -261,6 +261,7 @@ async def _handle_workout_add_command(text: str) -> bool:
         additional_count = kanji_to_int(add_match.group(1))
         if additional_count > 0:
             await manager.update_and_broadcast("ADD_UNDONE", value=additional_count)
+            logger.info(f"音声報告: 筋トレを {additional_count} 回追加しました。")
             return True
     return False
 
@@ -275,7 +276,7 @@ async def _handle_workout_start_with_count_command(text: str) -> bool:
         if initial_count > 0:
             # 【重要】未消化の数が、発話された回数以上ある場合のみ有効とする
             if manager.undone < initial_count:
-                print(f"音声報告スキップ: 現在の未消化数({manager.undone})が指定回数({initial_count})未満です。")
+                logger.info(f"音声報告スキップ: 現在の未消化数({manager.undone})が指定回数({initial_count})未満です。")
                 return False
 
             # 状態変数の設定（未消化数 undone は変更せず、比較用の基準値だけを固定する）
@@ -284,8 +285,7 @@ async def _handle_workout_start_with_count_command(text: str) -> bool:
 
             # 既存のモード変更通知のみを送信（フロントエンドの表示を音声モードに切り替えさせる）
             await manager.broadcast({"type": "MODE_CHANGE", "value": "voice"})
-
-            print(f"音声報告: 筋トレを {initial_count} 回で開始しました。（基準値: {manager.last_number}、未消化数: {manager.undone}）")
+            logger.info(f"音声報告: 筋トレを {initial_count} 回で開始しました。（基準値: {manager.last_number}、未消化数: {manager.undone}）")
             return True
     return False
 
@@ -296,6 +296,7 @@ async def _handle_workout_mode_start_command(text: str) -> bool:
         manager.is_voice_mode = True
         manager.last_number = None
         await manager.broadcast({"type": "MODE_CHANGE", "value": "voice"})
+        logger.info(f"音声報告: 筋トレを開始します。")
         return True
     return False
 
@@ -313,6 +314,7 @@ async def _handle_workout_countdown_process(text: str) -> bool:
             await manager.update_and_broadcast("DIGEST",
                                                total=manager.total + 1,
                                                undone=max(0, manager.undone - 1))
+            logger.info(f"音声報告: 筋トレを開始しました。（基準値: {manager.last_number}、未消化数: {manager.undone}）")
         return True
 
     # 2回目以降の差分計算処理 (誤差は3カウント以内制限)
@@ -330,6 +332,7 @@ async def _handle_workout_countdown_process(text: str) -> bool:
             manager.is_voice_mode = False
             manager.last_number = None
             await manager.broadcast({"type": "MODE_CHANGE", "value": "normal"})
+            logger.info(f"音声報告: 筋トレを終了しました。")
         return True
 
     return False
