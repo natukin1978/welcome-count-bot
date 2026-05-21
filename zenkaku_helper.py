@@ -15,13 +15,14 @@ def kanji_to_int(text):
     text = text.translate(str.maketrans('０１２３４５６７８９', '0123456789'))
     text = text.replace('。', '').replace('！', '').replace('？', '').strip()
 
-    # 2. 変換テーブル（カタカナ等の正規化）
+    # 2. 変換テーブル（カタカナや誤認識の正規化）
     replacement_table = {
         "ゼロ": "0",
         "零": "0",
         "二位": "2",
         "ゴー": "5",
         "中": "10",
+        "軸": "19",
     }
     for key, value in replacement_table.items():
         text = text.replace(key, value)
