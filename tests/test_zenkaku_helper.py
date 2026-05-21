@@ -32,9 +32,8 @@ class TestZenkakuHelper(unittest.TestCase):
 
     def test_voice_recognition_fix(self):
         """音声認識の誤変換対応テスト"""
-        # 「中」を「十」として処理できているか
-        self.assertEqual(kanji_to_int("中九"), 19)
         self.assertEqual(kanji_to_int("中"), 10)
+        self.assertEqual(kanji_to_int("軸"), 19)
 
     def test_with_symbols(self):
         """記号のみ許容するケース（ゆかコネ等の標準的な末尾文字）"""

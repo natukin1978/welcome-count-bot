@@ -33,6 +33,8 @@ class TestWorkoutLogic(unittest.IsolatedAsyncioTestCase):
         await main.recv_fuyuka_response(json.dumps(data))
         self.manager.broadcast.assert_any_call({
             "type": "ADD_UNDONE",
+            "total": 100,
+            "undone": 52,
             "value": 2,
         })
 
@@ -61,6 +63,8 @@ class TestWorkoutLogic(unittest.IsolatedAsyncioTestCase):
         await main.recv_fuyuka_response(json.dumps(data))
         self.manager.broadcast.assert_any_call({
             "type": "ADD_UNDONE",
+            "total": 100,
+            "undone": 51,
             "value": 1,
         })
 
@@ -94,6 +98,8 @@ class TestWorkoutLogic(unittest.IsolatedAsyncioTestCase):
         await main.recv_fuyuka_response(json.dumps(data))
         self.manager.broadcast.assert_any_call({
             "type": "ADD_UNDONE",
+            "total": 100,
+            "undone": 52,
             "value": 2,
         })
 
@@ -126,6 +132,8 @@ class TestWorkoutLogic(unittest.IsolatedAsyncioTestCase):
         await main.recv_fuyuka_response(json.dumps(data))
         self.manager.broadcast.assert_any_call({
             "type": "ADD_UNDONE",
+            "total": 100,
+            "undone": 51,
             "value": 1,
         })
 

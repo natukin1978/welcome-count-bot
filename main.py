@@ -241,10 +241,7 @@ async def recv_fuyuka_response(message: str) -> None:
         else:
             value = waudc["normal"]
         if value != 0:
-            await manager.broadcast({
-                "type": "ADD_UNDONE",
-                "value": value,
-            })
+            await manager.update_and_broadcast("ADD_UNDONE", value=value)
 
     except json.JSONDecodeError:
         pass
