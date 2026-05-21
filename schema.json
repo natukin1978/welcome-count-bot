@@ -1,0 +1,99 @@
+{
+  "type": "object",
+  "title": "基本設定",
+  "properties": {
+    "logLevel": {
+      "type": "string",
+      "title": "ログ出力レベル",
+      "description": "コンソールに出力する情報の詳細度。通常は WARNING を推奨。",
+      "propertyOrder": 1,
+      "enum": [
+        "DEBUG",
+        "INFO",
+        "WARNING",
+        "ERROR"
+      ]
+    },
+    "workoutApi": {
+      "type": "object",
+      "title": "筋トレ API 設定",
+      "description": "workout-overlayが接続するための情報",
+      "propertyOrder": 2,
+      "properties": {
+        "port": {
+          "type": "integer",
+          "title": "ポート番号",
+          "description": "通常は\"38696\"。すでに使用されていた場合に変更する。",
+          "propertyOrder": 1
+        }
+      }
+    },
+    "fuyukaApi": {
+      "type": "object",
+      "title": "Fuyuka API 設定",
+      "description": "Fuyuka APIで welcome を監視します。",
+      "propertyOrder": 3,
+      "properties": {
+        "enable": {
+          "type": "boolean",
+          "title": "有効",
+          "format": "checkbox",
+          "propertyOrder": 1
+        },
+        "baseUrl": {
+          "type": "string",
+          "title": "ベースURL",
+          "description": "通常は\"ws://127.0.0.1:38321\"。あなたの環境に適宜合わせる。",
+          "propertyOrder": 2
+        }
+      }
+    },
+    "neoInnerApi": {
+      "type": "object",
+      "title": "ゆかコネNeo 本体内容API 設定",
+      "description": "発話の受信(WebSocket,文のみ)",
+      "propertyOrder": 4,
+      "properties": {
+        "enable": {
+          "type": "boolean",
+          "title": "有効",
+          "format": "checkbox",
+          "propertyOrder": 1
+        },
+        "baseUrl": {
+          "type": "string",
+          "title": "ベースURL",
+          "description": "あなたの環境に適宜合わせる。",
+          "propertyOrder": 2
+        }
+      },
+      "options": {
+        "collapsed": true
+      }
+    },
+    "welcomeAddUndoneCount": {
+      "type": "object",
+      "title": "welcome `未消化`追加回数 設定",
+      "description": "※ Fuyuka API 使用時のみ",
+      "propertyOrder": 5,
+      "properties": {
+        "enable": {
+          "type": "boolean",
+          "title": "有効",
+          "format": "checkbox",
+          "propertyOrder": 1
+        },
+        "first": {
+          "type": "integer",
+          "title": "初見",
+          "propertyOrder": 2
+        },
+        "normal": {
+          "type": "integer",
+          "title": "通常",
+          "propertyOrder": 3
+        }
+      }
+    }
+  }
+}
