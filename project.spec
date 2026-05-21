@@ -5,7 +5,7 @@ block_cipher = None
 # 同梱するリソースの定義
 added_files = [
     ('schema.json', '.'),
-    ('templates/index.html', 'templates'),
+    ('templates/config_app.html', 'templates'),
 ]
 
 # 本体の設定
