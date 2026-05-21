@@ -1,0 +1,46 @@
+name: Release Windows Executable
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install -r requirements.txt
+
+      - name: Build executable with PyInstaller
+        run: pyinstaller project.spec
+
+      - name: Create config.json
+        run: copy config.json.template config.json
+
+      - name: Create release archive
+        run: |
+          $tagName = "${{ github.ref_name }}"
+          $zipName = "WelcomeCountBot-$tagName.zip"
+          Compress-Archive -Path dist\myapp_dist\*, LICENSE, README.md, config.json, config.json.template, images -DestinationPath $zipName
+
+      - name: Upload release archive
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ./WelcomeCountBot-${{ github.ref_name }}.zip
+          asset_name: WelcomeCountBot-${{ github.ref_name }}.zip
+          asset_content_type: application/zip
