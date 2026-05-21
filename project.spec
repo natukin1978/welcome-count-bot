@@ -42,7 +42,7 @@ b = Analysis(
     noarchive=False,
 )
 
-MERGE( (a, 'TwitchChatBot', 'TwitchChatBot'), (b, 'ConfigApp', 'ConfigApp') )
+MERGE( (a, 'WelcomeCountBot', 'WelcomeCountBot'), (b, 'ConfigApp', 'ConfigApp') )
 
 pyz_a = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 exe_a = EXE(
@@ -50,7 +50,7 @@ exe_a = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='TwitchChatBot',
+    name='WelcomeCountBot',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
