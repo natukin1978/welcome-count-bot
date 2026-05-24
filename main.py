@@ -32,6 +32,7 @@ from cache_helper import get_cache_filepath
 from dict_helper import get_first_non_none_value
 from text_helper import read_text_set
 from websocket_helper import websocket_listen_forever
+from welcome_count_helper import read_welcome_add_undone_count
 from zenkaku_helper import kanji_to_int
 
 g.set_exclude_name = read_text_set("exclude_name.txt")
@@ -231,15 +232,15 @@ async def recv_fuyuka_response(message: str) -> None:
 
         logger.info("%s", name, extra={'force': True})
 
-        waudc = g.config["welcomeAddUndoneCount"]
-        if not waudc["enable"]:
+        waudc = read_welcome_add_undone_count()
+        if not waudc.get("enable", False):
             return
 
         value = 0
         if isFirst:
-            value = waudc["first"]
+            value = waudc.get("first", 0)
         else:
-            value = waudc["normal"]
+            value = waudc.get("normal", 0)
         if value != 0:
             await manager.update_and_broadcast("ADD_UNDONE", value=value)
 

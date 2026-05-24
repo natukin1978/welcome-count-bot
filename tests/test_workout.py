@@ -1,12 +1,19 @@
 import json
 import unittest
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import main  # main.pyをインポート
 
 
 class TestWorkoutLogic(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
+        self.read_welcome_add_undone_count = Mock()
+        self.read_welcome_add_undone_count.return_value = {
+            "enable": True,
+            "first": 2,
+            "normal": 1,
+        }
+        main.read_welcome_add_undone_count = self.read_welcome_add_undone_count
         self.manager = main.ConnectionManager()
         self.manager.broadcast = AsyncMock()
         # テスト用の初期状態を設定
@@ -16,11 +23,6 @@ class TestWorkoutLogic(unittest.IsolatedAsyncioTestCase):
 
     async def test_add_undone_is_first(self):
         """初見コメントで未消化が送信されるかテスト"""
-        waudc = main.g.config["welcomeAddUndoneCount"]
-        waudc["enable"] = True
-        waudc["first"] = 2
-        waudc["normal"] = 1
-
         # 初回(さらに初見)
         data = {
             "id": "twitch_chat_bot",
@@ -46,11 +48,6 @@ class TestWorkoutLogic(unittest.IsolatedAsyncioTestCase):
 
     async def test_add_undone_is_not_first(self):
         """コメントで未消化が送信されるかテスト"""
-        waudc = main.g.config["welcomeAddUndoneCount"]
-        waudc["enable"] = True
-        waudc["first"] = 2
-        waudc["normal"] = 1
-
         # 初回(常連)
         data = {
             "id": "twitch_chat_bot",
@@ -75,11 +72,6 @@ class TestWorkoutLogic(unittest.IsolatedAsyncioTestCase):
 
     async def test_add_undone_showroom_is_first(self):
         """SHOWROOMの初見コメントで未消化が送信されるかテスト"""
-        waudc = main.g.config["welcomeAddUndoneCount"]
-        waudc["enable"] = True
-        waudc["first"] = 2
-        waudc["normal"] = 1
-
         # 初回(さらに初見)
         data = {
             "id": "showroom_chat_bot",
@@ -110,11 +102,6 @@ class TestWorkoutLogic(unittest.IsolatedAsyncioTestCase):
 
     async def test_add_undone_showroom_is_not_first(self):
         """SHOWROOMのコメントで未消化が送信されるかテスト"""
-        waudc = main.g.config["welcomeAddUndoneCount"]
-        waudc["enable"] = True
-        waudc["first"] = 2
-        waudc["normal"] = 1
-
         # 初回(常連)
         data = {
             "id": "showroom_chat_bot",
