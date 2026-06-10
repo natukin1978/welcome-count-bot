@@ -195,7 +195,7 @@ async def recv_fuyuka_response(message: str) -> None:
 
         logger.info(json_data)
         data = json_data["request"]
-        name = get_first_non_none_value(data, ["displayName", "id"])
+        name = get_first_non_none_value(data, ["nickname", "displayName", "id"])
         text = data["content"]
 
         if get_first_non_none_value(data, ["isFirst"]):
@@ -300,7 +300,7 @@ async def _handle_workout_mode_start_command(text: str) -> bool:
     manager.is_voice_mode = True
     manager.last_number = None
     await manager.broadcast({"type": "MODE_CHANGE", "value": "voice"})
-    logger.info(f"音声報告: 筋トレを開始します。")
+    logger.info("音声報告: 筋トレを開始します。")
     return True
 
 
@@ -346,7 +346,7 @@ async def _handle_workout_countdown_process(text: str) -> bool:
         manager.is_voice_mode = False
         manager.last_number = None
         await manager.broadcast({"type": "MODE_CHANGE", "value": "normal"})
-        logger.info(f"音声報告: 筋トレを終了しました。")
+        logger.info("音声報告: 筋トレを終了しました。")
     return True
 
 
