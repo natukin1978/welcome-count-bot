@@ -365,8 +365,8 @@ async def recv_talk_text(message: str) -> None:
         # プレーンテキストとして処理する
         text = message.strip()
 
-        # if not text or text.endswith("..."):
-        if not text:
+        if not text or text.endswith("..."):
+            # 空文字や途中経過を取り込まない
             return
 
         # 1. 筋トレ回数追加コマンドの判定
