@@ -14,9 +14,13 @@
 
 来訪者の初コメントをトリガーに、設定に応じた回数（初見/通常）を「未消化数（undone）」に自動プールします。
 
+※ 要 [電脳娘フユカ (AIモデレーター Fuyuka API)](https://github.com/natukin1978/ai-moderator-fuyuka)
+
 - 音声認識連動型カウントダウン音声認識
 
 テキストを解析し、自動で筋トレモードの切り替えや回数の消化を行います。
+
+※ 要 [ゆかコネNEO](https://nmori.github.io/yncneo-Docs/)
 
 ## 音声コマンド一覧
 
